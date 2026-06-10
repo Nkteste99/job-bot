@@ -27,6 +27,7 @@ class Candidatura(BaseModel):
     origem: Optional[str] = None
     tentativas: int = 0
     erro_ultima_tentativa: Optional[str] = None
+    created_at: Optional[datetime] = None
 
     class Config:
         orm_mode = True

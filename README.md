@@ -42,3 +42,21 @@ python main.py
 Notas
 - A primeira versão não conecta ao Supabase automaticamente; configure as variáveis em `.env`.
 - As etapas seguintes implementarão conexão com banco, coletores e notificações.
+
+Como executar a coleta
+----------------------
+
+Para executar o coletor Gupy e inserir vagas no banco execute o serviço de coleta:
+
+1. Configure as variáveis em `.env` (SUPABASE_URL e SUPABASE_KEY) e ative um ambiente Python com dependências instaladas ou use Docker.
+
+2. Rodar o serviço de coleta manualmente:
+
+```bash
+# activate your venv if using one
+python -m services.collector_service
+```
+
+O serviço executa uma coleta para `desenvolvedor` em `São Paulo` quando executado como script. Para testar idempotência, execute o comando duas vezes; a segunda execução não deve inserir vagas duplicadas.
+
+Observação: os resultados dependem das credenciais e das políticas do Supabase (RLS). Se as inserções parecerem não persistir, verifique as permissões do projeto Supabase.

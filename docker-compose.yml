@@ -1,0 +1,11 @@
+version: '3.8'
+services:
+  job-bot:
+    build: .
+    container_name: job-bot
+    env_file:
+      - .env
+    volumes:
+      - ./:/app
+    restart: unless-stopped
+    command: python -u main.py

@@ -54,6 +54,22 @@ pip install -r requirements.txt
 python -m services.collector_service
 ```
 
+Agendamento periódico
+---------------------
+O serviço pode ser executado continuamente com agendamento horário (usa a biblioteca `schedule`). Ao iniciar o serviço ele executa uma coleta imediata e então roda a coleta a cada 1 hora (no modo de testes o número de vagas por execução é limitado a 10).
+
+Exemplo — rodar em foreground:
+
+```bash
+source .venv/bin/activate
+python -m services.collector_service
+```
+
+Observações:
+- Para alterar o limite de vagas por execução edite a constante `LIMIT` no início de `services/collector_service.py` ou remova a lógica de slice quando quiser coletar todas as vagas.
+- Logs: o serviço grava logs em `logs/collector.log` no diretório do projeto (o diretório `logs/` é criado automaticamente).
+- Para execução em produção use um gerenciador de processos (systemd, supervisord, Docker, etc.) ou crie um container com `docker compose`.
+
 Como rodar com Docker
 ---------------------
 1. Configure as variáveis de ambiente no ambiente do container (ou monte o arquivo `.env`).

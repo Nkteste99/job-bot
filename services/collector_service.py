@@ -1,9 +1,33 @@
 from typing import Tuple
+import time
+from datetime import datetime
+
+import logging
+import sys
+from pathlib import Path
+
+import schedule
 
 from collectors.gupy import collect
 from models.models import Vaga
 from database.vagas_repository import get_vaga_by_external_id, insert_vaga
 from notifier.telegram import send_message, notify_new_vagas
+
+# Ensure logs directory exists at project root and configure logging to file
+ROOT = Path(__file__).resolve().parents[1]
+LOG_DIR = ROOT / "logs"
+LOG_DIR.mkdir(parents=True, exist_ok=True)
+LOG_PATH = LOG_DIR / "collector.log"
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="[%(asctime)s] %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
+    handlers=[
+        logging.FileHandler(LOG_PATH, encoding="utf-8"),
+        logging.StreamHandler(sys.stdout),
+    ],
+)
 
 
 def run_collection(cargo: str, localizacao: str) -> Tuple[int, int]:
@@ -12,6 +36,10 @@ def run_collection(cargo: str, localizacao: str) -> Tuple[int, int]:
     Returns a tuple: (inserted_count, existing_count)
     """
     vagas = collect(cargo, localizacao)
+    # LIMIT for testing phase (easy to remove later)
+    LIMIT = globals().get("LIMIT", 10)
+    if isinstance(LIMIT, int) and LIMIT > 0:
+        vagas = vagas[:LIMIT]
     inserted = 0
     existing = 0
     # in-process cache of external_ids seen during this process lifetime
@@ -62,6 +90,23 @@ def run_collection(cargo: str, localizacao: str) -> Tuple[int, int]:
 if __name__ == "__main__":
     cargo = "desenvolvedor"
     local = "São Paulo"
-    print(f"Running collection for {cargo} - {local}")
-    a, b = run_collection(cargo, local)
-    print(f"Inserted: {a}, Existing: {b}")
+    def _log(msg: str):
+        logging.info(msg)
+
+    def _job():
+        _log("Coleta iniciada...")
+        a, b = run_collection(cargo, local)
+        _log(f"Coleta finalizada — Inseridas: {a}, Existentes: {b}")
+
+    # immediate run
+    _job()
+
+    # schedule hourly
+    schedule.every(1).hours.do(_job)
+    _log("Agendador ativo: coleta a cada 1 hora (LIMIT=10 por execução)")
+    try:
+        while True:
+            schedule.run_pending()
+            time.sleep(1)
+    except KeyboardInterrupt:
+        _log("Agendador interrompido pelo usuário")

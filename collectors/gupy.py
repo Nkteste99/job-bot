@@ -19,7 +19,7 @@ def _map_job_to_vaga(job: Dict) -> Vaga:
     # Map API fields to Vaga model according to the provided mapping:
     # id -> external_id
     # name -> titulo
-    # careerPageName -> empresa
+    # companyName -> nome real; careerPageName pode trazer slogan/branding
     # jobUrl -> link
     # city + state -> localizacao ("cidade - estado")
     # publishedDate -> data_publicacao
@@ -27,7 +27,7 @@ def _map_job_to_vaga(job: Dict) -> Vaga:
     # fonte -> "gupy"
     external_id = job.get("id")
     titulo = job.get("name")
-    empresa = job.get("careerPageName") or job.get("careerPage")
+    empresa = job.get("companyName") or job.get("careerPageName") or job.get("careerPage")
     link = job.get("jobUrl") or job.get("job_url")
     salario = job.get("salary") or job.get("remuneration")
     city = job.get("city", "")
@@ -52,7 +52,7 @@ def _map_job_to_vaga(job: Dict) -> Vaga:
     )
 
 
-def collect(cargo: str, localizacao: str) -> List[Vaga]:
+def collect(cargo: str, localizacao: str, limit: int = 100) -> List[Vaga]:
     """Collect vacancies from Gupy matching `cargo` and `localizacao`.
 
     For each job returned by the API we map to `Vaga`, avoid duplicates by
@@ -60,7 +60,7 @@ def collect(cargo: str, localizacao: str) -> List[Vaga]:
     `insert_vaga`.
     """
     params = {
-        "limit": 100,
+        "limit": limit,
         "offset": 0,
         "sortBy": "publishedDate",
         "jobName": cargo,
@@ -123,6 +123,3 @@ def collect(cargo: str, localizacao: str) -> List[Vaga]:
 
 if __name__ == "__main__":
     res = collect("desenvolvedor", "São Paulo")
-    print(f"Found {len(res)} vacancies")
-    if res:
-        print(res[0].dict())

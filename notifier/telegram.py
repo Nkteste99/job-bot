@@ -6,6 +6,16 @@ from config.settings import settings
 from models.models import Vaga
 
 
+def _first_text(*values) -> Optional[str]:
+    for value in values:
+        if value is None:
+            continue
+        text = str(value).strip()
+        if text:
+            return text
+    return None
+
+
 def send_message(text: str, vaga_id: Optional[str] = None) -> bool:
     """Send a plain HTML-formatted message to the configured chat id using Telegram Bot HTTP API.
 
@@ -53,7 +63,11 @@ def _format_vaga_message(vaga: Vaga) -> str:
     lines = []
 
     # Company
-    company = (getattr(vaga, "empresa", None) or "").strip()
+    company = _first_text(
+        getattr(vaga, "companyName", None),
+        getattr(vaga, "empresa", None),
+        getattr(vaga, "careerPageName", None),
+    )
     if company:
         lines.append(f"🏢 {company}")
 
@@ -67,42 +81,24 @@ def _format_vaga_message(vaga: Vaga) -> str:
     if location:
         lines.append(f"📍 {location}")
 
-    # Modalidade: combine isRemoteWork and workplaceType when available
-    modality = None
-    # try explicit attributes that may exist on the Vaga (collector may add them)
-    is_remote = None
-    workplace = None
-    for key in ("isRemoteWork", "is_remote", "isremotework"):
-        if hasattr(vaga, key):
-            is_remote = getattr(vaga, key)
-            break
-        is_remote = getattr(vaga, "__dict__", {}).get(key) if isinstance(getattr(vaga, "__dict__", {}), dict) else None
-        if is_remote is not None:
-            break
-    for key in ("workplaceType", "workplace_type", "workplace", "modalidade", "modality"):
-        if hasattr(vaga, key):
-            workplace = getattr(vaga, key)
-            break
-        workplace = getattr(vaga, "__dict__", {}).get(key) if isinstance(getattr(vaga, "__dict__", {}), dict) else None
-        if workplace:
-            break
+    # Modalidade
+    workplace = _first_text(
+        getattr(vaga, "workplaceType", None),
+        getattr(vaga, "workplace_type", None),
+        getattr(vaga, "workplace", None),
+        getattr(vaga, "modalidade", None),
+        getattr(vaga, "modality", None),
+    )
+    workplace_value = (workplace or "").lower()
+    if workplace_value == "remote":
+        lines.append("🏠 Remoto")
+    elif workplace_value == "hybrid":
+        lines.append("🔄 Híbrido")
+    else:
+        lines.append("🏢 Presencial")
 
-    if is_remote and not workplace:
-        modality = "Remoto"
-    elif workplace:
-        w = str(workplace).lower()
-        if "on-site" in w or "on_site" in w or "on site" in w or "on-site" in w:
-            modality = "Presencial"
-        elif "remote" in w:
-            modality = "Remoto"
-        elif "hybrid" in w:
-            modality = "Híbrido"
-        elif w in ("on-site", "on_site", "onsite"):
-            modality = "Presencial"
-        else:
-            modality = str(workplace)
-    if modality:
-        lines.append(f"🏠 {modality}")
+    # Salary placeholder for V3 extraction
+    lines.append("⚠️ Salário: Não informado")
 
     # Application deadline: try several possible attribute names
     deadline = None
@@ -149,20 +145,3 @@ def notify_new_vagas(vagas: List[Vaga]) -> int:
         if send_message(text, vaga_id=vaga_id):
             sent += 1
     return sent
-"""Telegram notifier (minimal placeholder).
-
-Will use `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID` from env. For V1 we
-send simple text messages via the Bot API using `requests`.
-"""
-import requests
-from config.settings import settings
-
-
-def send_telegram_message(text: str) -> bool:
-    token = settings.TELEGRAM_BOT_TOKEN
-    chat_id = settings.TELEGRAM_CHAT_ID
-    if not token or not chat_id:
-        return False
-    url = f"https://api.telegram.org/bot{token}/sendMessage"
-    resp = requests.post(url, json={"chat_id": chat_id, "text": text})
-    return resp.status_code == 200

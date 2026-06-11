@@ -10,6 +10,10 @@ perform a lightweight connectivity check.
 from typing import Optional
 
 import httpx
+import requests
+from dotenv import load_dotenv
+
+load_dotenv()
 
 from config.settings import settings
 
@@ -19,11 +23,104 @@ except Exception:  # pragma: no cover - provide a helpful import-time message
     create_client = None
 
 
+class _RestQuery:
+    def __init__(self, db: "Database", table_name: str):
+        self._db = db
+        self._table_name = table_name
+        self._method = "GET"
+        self._select = "*"
+        self._filters = []
+        self._limit = None
+        self._payload = None
+
+    def select(self, columns: str = "*"):
+        self._method = "GET"
+        self._select = columns
+        return self
+
+    def insert(self, payload):
+        self._method = "POST"
+        self._payload = payload
+        return self
+
+    def update(self, payload):
+        self._method = "PATCH"
+        self._payload = payload
+        return self
+
+    def delete(self):
+        self._method = "DELETE"
+        return self
+
+    def filter(self, column: str, operator: str, value):
+        self._filters.append((column, operator, value))
+        return self
+
+    def eq(self, column: str, value):
+        return self.filter(column, "eq", value)
+
+    def limit(self, value: int):
+        self._limit = value
+        return self
+
+    def execute(self):
+        if not (self._db.supabase_url and self._db.supabase_key):
+            raise RuntimeError("Supabase client is not initialized")
+
+        url = self._db.supabase_url.rstrip("/") + f"/rest/v1/{self._table_name}"
+        headers = {
+            "apikey": self._db.supabase_key,
+            "Authorization": f"Bearer {self._db.supabase_key}",
+            "Content-Type": "application/json",
+            "Prefer": "return=representation",
+        }
+        params = {}
+        if self._method == "GET":
+            params["select"] = self._select
+            if self._limit is not None:
+                params["limit"] = self._limit
+        if self._filters:
+            filter_parts = []
+            for column, operator, value in self._filters:
+                filter_parts.append((column, operator, value))
+            for column, operator, value in filter_parts:
+                params[column] = f"{operator}.{value}"
+
+        response = requests.request(
+            self._method,
+            url,
+            headers=headers,
+            params=params,
+            json=self._payload,
+            timeout=30,
+            verify=False,
+        )
+        response.raise_for_status()
+        try:
+            data = response.json()
+        except Exception:
+            data = []
+
+        class _Result:
+            def __init__(self, data):
+                self.data = data
+
+        return _Result(data)
+
+
+class _RestClient:
+    def __init__(self, db: "Database"):
+        self._db = db
+
+    def table(self, table_name: str):
+        return _RestQuery(self._db, table_name)
+
+
 class Database:
     def __init__(self):
         self.supabase_url: Optional[str] = None
         self.supabase_key: Optional[str] = None
-        self.client = None
+        self._client = None
 
         try:
             self.supabase_url = str(settings.SUPABASE_URL)
@@ -34,11 +131,20 @@ class Database:
             self.supabase_url = None
             self.supabase_key = None
 
-        if create_client is not None and self.supabase_url and self.supabase_key:
+    @property
+    def client(self):
+        if self._client is None and create_client is not None and self.supabase_url and self.supabase_key:
             try:
-                self.client = create_client(self.supabase_url, self.supabase_key)
+                self._client = create_client(self.supabase_url, self.supabase_key)
             except Exception:
-                self.client = None
+                self._client = _RestClient(self)
+        elif self._client is None and self.supabase_url and self.supabase_key:
+            self._client = _RestClient(self)
+        return self._client
+
+    @client.setter
+    def client(self, value):
+        self._client = value
 
     def ping(self) -> bool:
         """Lightweight check that configuration values exist."""
@@ -62,7 +168,7 @@ class Database:
         }
 
         try:
-            resp = httpx.get(url, headers=headers, timeout=timeout)
+            resp = httpx.get(url, headers=headers, timeout=timeout, verify=False)
             return resp.status_code < 500
         except Exception:
             return False

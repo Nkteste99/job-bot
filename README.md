@@ -98,7 +98,13 @@ Status atual do projeto (V1)
   - Repositórios para `vagas` e `candidaturas` (database/)
   - Coletor Gupy implementado (`collectors/gupy.py`) com mapeamento para `Vaga`
   - Serviço de orquestração de coleta e deduplicação (`services/collector_service.py`)
-  - Notificações via Telegram integradas (`notifier/telegram.py`) — enviam resumo e mensagens por vaga
+  - Notificações via Telegram integradas (`notifier/telegram.py`) — enviam resumo e mensagens por vaga com empresa, modalidade e salário provisório
+
+Formato das mensagens do Telegram
+---------------------------------
+- Empresa: tenta `companyName` quando disponível e usa `careerPageName` como fallback
+- Modalidade: `remote` vira `🏠 Remoto`, `hybrid` vira `🔄 Híbrido` e os demais casos aparecem como `🏢 Presencial`
+- Salário: por enquanto a notificação mostra `⚠️ Salário: Não informado`
 
 Observações
 -----------

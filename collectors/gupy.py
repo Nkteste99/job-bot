@@ -12,7 +12,7 @@ from models.models import Vaga
 from database.vagas_repository import get_vaga_by_external_id, insert_vaga
 
 
-API_URL = "https://portal.api.gupy.io/api/job"
+API_URL = "https://employability-portal.gupy.io/api/v1/jobs"
 
 
 def _map_job_to_vaga(job: Dict) -> Vaga:
@@ -30,12 +30,11 @@ def _map_job_to_vaga(job: Dict) -> Vaga:
     empresa = job.get("careerPageName") or job.get("careerPage")
     link = job.get("jobUrl") or job.get("job_url")
     salario = job.get("salary") or job.get("remuneration")
-    city = job.get("city")
-    state = job.get("state")
-    if city and state:
-        localizacao = f"{city} - {state}"
-    else:
-        localizacao = city or state or job.get("location")
+    city = job.get("city", "")
+    state = job.get("state", "")
+    # Concatenate city and state as requested. If both are empty, leave None.
+    combined = f"{city} - {state}"
+    localizacao = combined if combined.strip(" - ") != "" else None
     fonte = "gupy"
     data_publicacao = job.get("publishedDate") or job.get("published_date")
     descricao = job.get("description")
@@ -60,9 +59,15 @@ def collect(cargo: str, localizacao: str) -> List[Vaga]:
     `external_id` and insert new vacancies into the DB via
     `insert_vaga`.
     """
-    params = {"name": cargo, "limit": 100}
+    params = {
+        "limit": 100,
+        "offset": 0,
+        "sortBy": "publishedDate",
+        "jobName": cargo,
+    }
+    headers = {"User-Agent": "Mozilla/5.0"}
     try:
-        resp = requests.get(API_URL, params=params, timeout=10)
+        resp = requests.get(API_URL, params=params, headers=headers, timeout=10)
         resp.raise_for_status()
     except Exception:
         return []

@@ -33,8 +33,14 @@ def _map_job_to_vaga(job: Dict) -> Vaga:
     city = job.get("city", "")
     state = job.get("state", "")
     # Concatenate city and state as requested. If both are empty, leave None.
-    combined = f"{city} - {state}"
-    localizacao = combined if combined.strip(" - ") != "" else None
+    if city and state:
+        localizacao = f"{city} - {state}"
+    elif city:
+        localizacao = city
+    elif state:
+        localizacao = state
+    else:
+        localizacao = None
     fonte = "gupy"
     data_publicacao = job.get("publishedDate") or job.get("published_date")
     descricao = job.get("description")
@@ -46,11 +52,11 @@ def _map_job_to_vaga(job: Dict) -> Vaga:
         link=link,
         salario=salario,
         localizacao=localizacao,
+        workplaceType=job.get("workplaceType"),
         fonte=fonte,
         data_publicacao=data_publicacao,
         descricao=descricao,
     )
-
 
 def collect(cargo: str, localizacao: str, limit: int = 100) -> List[Vaga]:
     """Collect vacancies from Gupy matching `cargo` and `localizacao`.
@@ -101,6 +107,12 @@ def collect(cargo: str, localizacao: str, limit: int = 100) -> List[Vaga]:
     vagas: List[Vaga] = []
     for job in items:
         try:
+            # Filtro de localização: remoto aceita qualquer lugar, presencial/híbrido só SP
+            workplace = (job.get("workplaceType") or "").lower()
+            state = (job.get("state") or "").strip()
+            if workplace != "remote" and state != "São Paulo":
+                continue
+
             vaga = _map_job_to_vaga(job)
             if vaga.external_id:
                 existing = get_vaga_by_external_id(vaga.external_id)

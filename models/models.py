@@ -12,6 +12,7 @@ class Vaga(BaseModel):
     link: Optional[str] = None
     salario: Optional[str] = None
     localizacao: Optional[str] = None
+    workplaceType: Optional[str] = None
     fonte: Optional[str] = None
     data_publicacao: Optional[datetime] = None
     descricao: Optional[str] = None

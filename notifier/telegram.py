@@ -94,7 +94,7 @@ def _format_vaga_message(vaga: Vaga) -> str:
         lines.append("🏠 Remoto")
     elif workplace_value == "hybrid":
         lines.append("🔄 Híbrido")
-    else:
+    elif workplace_value:
         lines.append("🏢 Presencial")
 
     # Salary placeholder for V3 extraction

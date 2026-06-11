@@ -44,10 +44,17 @@ Notas
 - As etapas seguintes implementarão conexão com banco, coletores e notificações.
 
 Como executar a coleta
-----------------------
 
-Para executar o coletor Gupy e inserir vagas no banco execute o serviço de coleta:
+5. Teste rápido
 
+Depois de configurar o token e o chat id, você pode testar envio de mensagem diretamente usando um REPL Python:
+
+```py
+from notifier.telegram import send_message
+send_message('Teste do bot: coleta configurada')
+```
+
+Se receber a mensagem no Telegram, o envio está funcionando.
 1. Configure as variáveis em `.env` (SUPABASE_URL e SUPABASE_KEY) e ative um ambiente Python com dependências instaladas ou use Docker.
 
 2. Rodar o serviço de coleta manualmente:
@@ -60,3 +67,31 @@ python -m services.collector_service
 O serviço executa uma coleta para `desenvolvedor` em `São Paulo` quando executado como script. Para testar idempotência, execute o comando duas vezes; a segunda execução não deve inserir vagas duplicadas.
 
 Observação: os resultados dependem das credenciais e das políticas do Supabase (RLS). Se as inserções parecerem não persistir, verifique as permissões do projeto Supabase.
+
+Instruções finais — executar o projeto completo
+
+- Crie e ative um virtualenv (recomendado):
+
+```bash
+python -m venv .venv
+source .venv/bin/activate
+```
+
+- Instale dependências:
+
+```bash
+pip install -r requirements.txt
+```
+
+- Crie e preencha um arquivo `.env` na raiz com as variáveis obrigatórias (ex.: `SUPABASE_URL`, `SUPABASE_KEY`, `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`).
+
+- Rodar a coleta única (coleta → persistência → notificações):
+
+```bash
+source .venv/bin/activate
+python -m services.collector_service
+```
+
+- Opcional: agende via `cron` / `systemd` / `docker-compose` conforme seu fluxo de implantação.
+
+Pare aqui e confirme para que eu possa executar novamente ou ajustar algo.

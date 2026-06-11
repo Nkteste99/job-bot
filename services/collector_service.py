@@ -3,6 +3,7 @@ from typing import Tuple
 from collectors.gupy import collect
 from models.models import Vaga
 from database.vagas_repository import get_vaga_by_external_id, insert_vaga
+from notifier.telegram import send_message, notify_new_vagas
 
 
 def run_collection(cargo: str, localizacao: str) -> Tuple[int, int]:
@@ -41,6 +42,19 @@ def run_collection(cargo: str, localizacao: str) -> Tuple[int, int]:
         except Exception:
             # ignore individual failures and continue
             continue
+
+    # send notifications
+    try:
+        summary = f"✅ Coleta concluída: {inserted} novas vagas encontradas, {existing} já existiam."
+        send_message(summary)
+        if inserted:
+            # notify detailed messages for new vagas
+            # rebuild list of new vagas from seen ids (approximation)
+            new_vagas = [v for v in vagas if v.external_id and str(v.external_id) in _seen_external_ids]
+            notify_new_vagas(new_vagas)
+    except Exception:
+        # don't break execution for notifier errors
+        pass
 
     return inserted, existing
 

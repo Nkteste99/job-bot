@@ -48,6 +48,22 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
+Como rodar os testes
+--------------------
+Com o virtualenv ativado e as dependências instaladas:
+
+```bash
+pytest
+```
+
+Para saída mais detalhada:
+
+```bash
+pytest -v
+```
+
+Os testes usam mocks e não dependem de Supabase nem da API da Gupy.
+
 3. Rodar o serviço de coleta (executa coleta, persiste e envia notificações):
 
 ```bash
@@ -114,6 +130,6 @@ Observações
 Próximos passos sugeridos
 ------------------------
 - Agendar execução periódica (cron/systemd/docker) para rodar a coleta regularmente.
-- Adicionar testes automatizados e cobertura para os repositórios.
+- Expandir cobertura de testes para outros repositórios e serviços.
 
 Se desejar, eu executo agora uma coleta de teste com outro termo ou ajusto o coletor; informe a ação desejada.

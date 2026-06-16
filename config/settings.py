@@ -10,6 +10,12 @@ class Settings(BaseSettings):
     TELEGRAM_BOT_TOKEN: SecretStr = Field(..., description="Telegram bot token")
     TELEGRAM_CHAT_ID: str = Field(..., description="Telegram chat id")
 
+    # Gupy
+    GUPY_COOKIE: SecretStr = Field(
+        ...,
+        description="JWT do cookie candidate_secure_token da Gupy",
+    )
+
     # App
     LOG_LEVEL: str = Field("INFO", description="Logging level")
 

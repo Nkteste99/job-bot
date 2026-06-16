@@ -11,11 +11,10 @@ def insert_vaga(vaga: Vaga) -> Optional[Dict]:
     # perform insert (may return empty body / non-JSON response); ignore JSON parse errors
     try:
         db.client.table("vagas").insert(payload).execute()
-    except Exception:
-        # Some PostgREST responses may be empty which triggers a JSON decode
-        # error in the client; ignore and try to fetch the inserted row.
-        pass
-    if "external_id" in payload:
+    except Exception as e:
+        import traceback
+        print(f"ERRO INSERT VAGA: {e}")
+        traceback.print_exc()l_id" in payload:
         return get_vaga_by_external_id(payload["external_id"])
     # best-effort: return the most recently created vaga matching title+empresa
     res = (

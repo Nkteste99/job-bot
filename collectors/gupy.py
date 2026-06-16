@@ -52,7 +52,7 @@ def _map_job_to_vaga(job: Dict) -> Vaga:
         link=link,
         salario=salario,
         localizacao=localizacao,
-        workplaceType=job.get("workplaceType"),
+        workplacetype=job.get("workplaceType"),
         fonte=fonte,
         data_publicacao=data_publicacao,
         descricao=descricao,

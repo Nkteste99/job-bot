@@ -83,12 +83,13 @@ def _format_vaga_message(vaga: Vaga) -> str:
 
     # Modalidade
     workplace = _first_text(
-        getattr(vaga, "workplaceType", None),
+        getattr(vaga, "workplacetype", None),
         getattr(vaga, "workplace_type", None),
         getattr(vaga, "workplace", None),
         getattr(vaga, "modalidade", None),
         getattr(vaga, "modality", None),
     )
+    
     workplace_value = (workplace or "").lower()
     if workplace_value == "remote":
         lines.append("🏠 Remoto")

@@ -6,6 +6,8 @@ from .db import db
 
 def insert_vaga(vaga: Vaga) -> Optional[Dict]:
     payload = vaga.dict(exclude_none=True, exclude={"id"})
+    if "data_publicacao" in payload and payload["data_publicacao"] is not None:
+        payload["data_publicacao"] = payload["data_publicacao"].isoformat()
     if not db.client:
         raise RuntimeError("Supabase client is not initialized")
     # perform insert (may return empty body / non-JSON response); ignore JSON parse errors

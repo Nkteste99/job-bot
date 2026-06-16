@@ -88,7 +88,7 @@ def _register_candidatura(job_id: int, application_id: int) -> None:
     insert_candidatura(candidatura)
 
 
-def apply_to_job(session: requests.Session, job_id: int) -> dict:
+def apply_to_job(session: requests.Session, job_id: int, career_page_url: str = None) -> dict:
     if _has_existing_candidatura(job_id):
         logger.info("Candidatura já existe para job_id=%s — pulando", job_id)
         return {
@@ -97,6 +97,15 @@ def apply_to_job(session: requests.Session, job_id: int) -> dict:
             "skipped_questions": [],
             "reason": "candidatura_ja_existe",
         }
+
+    if career_page_url:
+        from urllib.parse import urlparse
+        parsed = urlparse(career_page_url)
+        company_origin = f"{parsed.scheme}://{parsed.netloc}"
+        session.headers.update({
+            "origin": company_origin,
+            "referer": f"{company_origin}/",
+        })
 
     application = _create_application(session, job_id)
     application_id = application["applicationId"]

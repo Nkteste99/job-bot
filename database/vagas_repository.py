@@ -16,7 +16,8 @@ def insert_vaga(vaga: Vaga) -> Optional[Dict]:
     except Exception as e:
         import traceback
         print(f"ERRO INSERT VAGA: {e}")
-        traceback.print_exc()l_id" in payload:
+        traceback.print_exc()
+    if "external_id" in payload:
         return get_vaga_by_external_id(payload["external_id"])
     # best-effort: return the most recently created vaga matching title+empresa
     res = (

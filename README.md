@@ -1,62 +1,54 @@
-BOT DE CANDIDATURAS
+# BOT DE CANDIDATURAS
 
-Descrição
----------
-Projeto para buscar vagas em plataformas públicas, persistir em banco (Supabase/PostgREST) e notificar novas vagas via Telegram.
+## Descrição
+Projeto para buscar vagas em plataformas públicas, persistir em banco (Supabase/PostgREST), notificar novas vagas via Telegram e automatizar candidaturas.
 
-Arquitetura resumida
---------------------
-Sites → Coleta (collectors) → Banco (Supabase/PostgREST) → Repositórios (database/) → Serviço de orquestração (services/) → Notificação → Telegram
+## Arquitetura resumida
+Sites → Coleta (collectors) → Banco (Supabase/PostgREST) → Repositórios (database/) → Serviço de orquestração (services/) → Candidatura automática → Notificação → Telegram
 
-Pré-requisitos
---------------
+## Pré-requisitos
 - Python 3.12
 - Docker e docker-compose (opcional)
 - Conta Supabase com projeto e API key
 - Bot Telegram e chat id (crie um bot com @BotFather e obtenha `TELEGRAM_BOT_TOKEN`)
 
-Instalação e configuração do `.env`
-----------------------------------
-1. Copie o arquivo de exemplo (se houver) ou crie um `.env` na raiz do projeto.
+## Instalação e configuração do `.env`
+
+1. Copie o arquivo de exemplo ou crie um `.env` na raiz do projeto:
 
 ```bash
-cp .env.example .env || true
-# Edite .env e preencha as variáveis sensíveis
+cp .env.example .env
 ```
 
-2. Valores mínimos necessários no `.env`:
+2. Valores necessários no `.env`:
 
 - `SUPABASE_URL` — URL do projeto Supabase (ex: https://xyz.supabase.co)
 - `SUPABASE_KEY` — anon ou service key do Supabase
 - `TELEGRAM_BOT_TOKEN` — token do bot (formato: 123456:ABC-DEF...)
 - `TELEGRAM_CHAT_ID` — id do chat ou usuário que receberá mensagens
+- `GUPY_COOKIE` — valor do `candidate_secure_token` JWT da sessão autenticada na Gupy (sem o prefixo `candidate_secure_token=`)
+- `APRESENTACAO_TEXTO` — texto de apresentação pessoal usado na etapa "Apresente-se!" da candidatura Gupy
+- `USER_NAME`, `USER_EMAIL`, `CURRICULO_PDF_PATH` — dados do usuário usados na automação de candidatura
 
-3. Salve o arquivo e mantenha fora do controle de versão (adicione ao `.gitignore`).
+3. Salve o arquivo e mantenha fora do controle de versão (já está no `.gitignore`).
 
-Como rodar localmente (venv)
----------------------------
-1. Criar e ativar um virtualenv:
+## Como rodar localmente (venv)
 
+**Linux/Mac:**
 ```bash
 python -m venv .venv
 source .venv/bin/activate
-```
-
-2. Instalar dependências:
-
-```bash
 pip install -r requirements.txt
 ```
 
-Como rodar os testes
---------------------
-Com o virtualenv ativado e as dependências instaladas:
-
-```bash
-pytest
+**Windows (PowerShell):**
+```powershell
+python -m venv .venv
+.venv\Scripts\activate
+pip install -r requirements.txt
 ```
 
-Para saída mais detalhada:
+## Como rodar os testes
 
 ```bash
 pytest -v
@@ -64,72 +56,76 @@ pytest -v
 
 Os testes usam mocks e não dependem de Supabase nem da API da Gupy.
 
-3. Rodar o serviço de coleta (executa coleta, persiste e envia notificações):
+## Coleta de vagas
 
 ```bash
 python -m services.collector_service
 ```
 
-Agendamento periódico
----------------------
-O serviço pode ser executado continuamente com agendamento horário (usa a biblioteca `schedule`). Ao iniciar o serviço ele executa uma coleta imediata e então roda a coleta a cada 1 hora (no modo de testes o número de vagas por execução é limitado a 10).
+O serviço executa uma coleta imediata ao iniciar e repete a cada 1 hora. Em modo de testes o limite é de 10 vagas por execução (constante `LIMIT` em `collector_service.py`).
 
-Exemplo — rodar em foreground:
+Logs gravados em `logs/collector.log` (diretório criado automaticamente).
+
+## Candidatura automática (V2)
+
+O fluxo de candidatura automática na Gupy cobre as seguintes etapas:
+
+1. Autenticação via `GUPY_COOKIE` (JWT `candidate_secure_token`)
+2. Criação da candidatura via API
+3. Resposta automática a perguntas da empresa — perguntas conhecidas são respondidas automaticamente pelo banco `respostas_perguntas`; perguntas inéditas pausam e aguardam resposta manual
+4. Etapa "Apresente-se!":
+   - Envio do texto de apresentação (`APRESENTACAO_TEXTO`)
+   - Seleção de skills destacadas: Python, Linux, AWS
+   - Conclusão da etapa via endpoint `/complete`
+
+Para candidatar manualmente a uma vaga específica:
 
 ```bash
-source .venv/bin/activate
-python -m services.collector_service
+python -m services.apply_service
 ```
 
-Observações:
-- Para alterar o limite de vagas por execução edite a constante `LIMIT` no início de `services/collector_service.py` ou remova a lógica de slice quando quiser coletar todas as vagas.
-- Logs: o serviço grava logs em `logs/collector.log` no diretório do projeto (o diretório `logs/` é criado automaticamente).
-- Para execução em produção use um gerenciador de processos (systemd, supervisord, Docker, etc.) ou crie um container com `docker compose`.
-
-Como rodar com Docker
----------------------
-1. Configure as variáveis de ambiente no ambiente do container (ou monte o arquivo `.env`).
-2. Build e run:
+## Como rodar com Docker
 
 ```bash
 docker compose build --no-cache
 docker compose up
 ```
 
-Variáveis de ambiente (explicação)
----------------------------------
-- `SUPABASE_URL`: URL do projeto Supabase (obrigatório para persistência).
-- `SUPABASE_KEY`: chave anon/service do Supabase (obrigatório).
-- `TELEGRAM_BOT_TOKEN`: token do bot Telegram (obrigatório para notificações).
-- `TELEGRAM_CHAT_ID`: chat id destino (obrigatório para notificações).
-- `USER_NAME`, `USER_EMAIL`, `CURRICULO_PDF_PATH`: dados do usuário usados por integrações/automação de candidatura (opcionais).
-- `LOG_LEVEL`: nível de logs (default `INFO`).
-- `PYTHONUNBUFFERED`: útil em containers (default `1`).
+## Variáveis de ambiente
 
-Status atual do projeto (V1)
-----------------------------
-- V1 em desenvolvimento. Etapas concluídas:
-  - Cliente Supabase e teste de conexão
-  - Arquivo de migração inicial (database/migrations/001_create_tables.sql)
-  - Repositórios para `vagas` e `candidaturas` (database/)
-  - Coletor Gupy implementado (`collectors/gupy.py`) com mapeamento para `Vaga`
-  - Serviço de orquestração de coleta e deduplicação (`services/collector_service.py`)
-  - Notificações via Telegram integradas (`notifier/telegram.py`) — enviam resumo e mensagens por vaga com empresa, modalidade e salário provisório
+| Variável | Descrição | Obrigatório |
+|---|---|---|
+| `SUPABASE_URL` | URL do projeto Supabase | ✅ |
+| `SUPABASE_KEY` | Chave anon/service do Supabase | ✅ |
+| `TELEGRAM_BOT_TOKEN` | Token do bot Telegram | ✅ |
+| `TELEGRAM_CHAT_ID` | Chat id destino | ✅ |
+| `GUPY_COOKIE` | JWT `candidate_secure_token` da sessão Gupy | ✅ |
+| `APRESENTACAO_TEXTO` | Texto de apresentação para candidaturas Gupy | ✅ |
+| `USER_NAME` | Nome do usuário | ✅ |
+| `USER_EMAIL` | E-mail do usuário | ✅ |
+| `CURRICULO_PDF_PATH` | Caminho para o PDF do currículo | opcional |
+| `LOG_LEVEL` | Nível de logs (default: INFO) | opcional |
 
-Formato das mensagens do Telegram
----------------------------------
-- Empresa: tenta `companyName` quando disponível e usa `careerPageName` como fallback
-- Modalidade: `remote` vira `🏠 Remoto`, `hybrid` vira `🔄 Híbrido` e os demais casos aparecem como `🏢 Presencial`
-- Salário: por enquanto a notificação mostra `⚠️ Salário: Não informado`
+## Status do projeto
 
-Observações
------------
-- A coleta depende da disponibilidade das APIs públicas (por exemplo Gupy). Em testes recentes o endpoint público retornou 404 em algumas consultas; ajustar termos/filtros pode ser necessário.
-- Verifique permissões RLS no Supabase caso inserções não sejam persistidas.
+### V1 — Concluída ✅
+- Conexão Supabase e migrações
+- Coletor Gupy com deduplicação
+- Notificações Telegram formatadas (empresa, modalidade, prazo)
+- Agendamento periódico com logs
 
-Próximos passos sugeridos
-------------------------
-- Agendar execução periódica (cron/systemd/docker) para rodar a coleta regularmente.
-- Expandir cobertura de testes para outros repositórios e serviços.
+### V2 — Em andamento 🚧
+- ✅ Etapa 1: Mapeamento do fluxo de candidatura Gupy
+- ✅ Etapa 2: Candidatura automática via API Gupy
+- ✅ Etapa 3: Etapa "Apresente-se!" (texto de apresentação + skills + complete)
+- ⏳ Próximas etapas: banco de Q&A dinâmico, integração com outros sites
 
-Se desejar, eu executo agora uma coleta de teste com outro termo ou ajusto o coletor; informe a ação desejada.
+### V3 — Planejada
+- Análise de compatibilidade vaga x perfil com IA (Gemini API)
+- Geração de carta de apresentação personalizada
+- Leitura e classificação de e-mails de recrutadores
+- Resumo inteligente de descrições de vagas
+
+## Observações
+- O `GUPY_COOKIE` expira periodicamente — renove fazendo login na Gupy e copiando o novo valor de `candidate_secure_token` nos headers de qualquer requisição autenticada (F12 → Network → Request Headers → Cookie)
+- Verifique permissões RLS no Supabase caso inserções não sejam persistidas

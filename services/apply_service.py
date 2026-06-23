@@ -67,6 +67,39 @@ def _process_questions(questions: List[Dict[str, Any]]) -> List[str]:
             skipped_questions.append(title)
     return skipped_questions
 
+def _submit_presentation(session: requests.Session, application_id: int, texto: str) -> bool:
+    url = f"{GUPY_API_BASE}/application-highlights/{application_id}/presentations"
+    response = session.patch(
+        url,
+        json={"highlightPresentations": [{"type": "text", "content": texto}]},
+        headers=_json_headers(session),
+        timeout=30,
+    )
+    return response.status_code == 200
+
+
+def _submit_skills(session: requests.Session, application_id: int, skill_ids: List[int] = None) -> bool:
+    if skill_ids is None:
+        skill_ids = [65846884, 65846886, 65846887]  # Python, Linux, AWS
+    url = f"{GUPY_API_BASE}/application-highlights/{application_id}/skills"
+    response = session.patch(
+        url,
+        json={"highlightSkills": skill_ids},
+        headers=_json_headers(session),
+        timeout=30,
+    )
+    return response.status_code == 200
+
+
+def _complete_step(session: requests.Session, application_id: int, register_step_id: int) -> bool:
+    url = f"{APPLICATION_URL}/{application_id}/{register_step_id}/complete"
+    response = session.patch(
+        url,
+        json={},
+        headers=_json_headers(session),
+        timeout=30,
+    )
+    return response.status_code == 200
 
 def _advance_step(session: requests.Session, application_id: int) -> Dict[str, Any]:
     url = f"{APPLICATION_URL}/{application_id}/step"
@@ -113,6 +146,12 @@ def apply_to_job(session: requests.Session, job_id: int, career_page_url: str = 
 
     questions = _get_question_forms(session, application_id, register_step_id)
     skipped_questions = _process_questions(questions)
+
+    from config.settings import settings
+    texto = getattr(settings, "APRESENTACAO_TEXTO", "") or ""
+    _submit_presentation(session, application_id, texto)
+    _submit_skills(session, application_id)
+    _complete_step(session, application_id, register_step_id)
 
     step = _advance_step(session, application_id)
     _register_candidatura(job_id, application_id)

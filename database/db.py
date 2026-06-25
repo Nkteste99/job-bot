@@ -11,6 +11,7 @@ from typing import Optional
 
 import httpx
 import requests
+import certifi
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -93,7 +94,7 @@ class _RestQuery:
             params=params,
             json=self._payload,
             timeout=30,
-            verify=False,
+            verify=certifi.where(),
         )
         response.raise_for_status()
         try:
@@ -168,7 +169,7 @@ class Database:
         }
 
         try:
-            resp = httpx.get(url, headers=headers, timeout=timeout, verify=False)
+            resp = httpx.get(url, headers=headers, timeout=timeout, verify=certifi.where())
             return resp.status_code < 500
         except Exception:
             return False

@@ -5,35 +5,29 @@ from .db import db
 
 
 def insert_candidatura(c: Candidatura) -> Optional[Dict]:
-    payload = c.dict(exclude_none=True, exclude={"id"})
     if not db.client:
         raise RuntimeError("Supabase client is not initialized")
-        # Only include columns that exist in the DB table
-        allowed = {
-            "vaga_id",
-            "data_aplicacao",
-            "status",
-            "observacoes",
-            "ultima_atualizacao",
-            "origem",
-            "tentativas",
-            "erro_ultima_tentativa",
-            "created_at",
-        }
-        payload = {k: v for k, v in c.dict(exclude_none=True, exclude={"id"}).items() if k in allowed}
-    # perform insert (may return empty body / non-JSON response); ignore JSON parse errors
+    
+    allowed = {
+        "vaga_id", "data_aplicacao", "status", "observacoes",
+        "ultima_atualizacao", "origem", "tentativas", "erro_ultima_tentativa",
+    }
+    payload = {k: v for k, v in c.dict(exclude_none=True, exclude={"id"}).items() if k in allowed}
+    
+    if "data_aplicacao" in payload and payload["data_aplicacao"] is not None:
+        payload["data_aplicacao"] = payload["data_aplicacao"].isoformat()
+
     try:
         db.client.table("candidaturas").insert(payload).execute()
-    except Exception:
-        # Some PostgREST responses may be empty which triggers a JSON decode
-        # error in the client; ignore and try to fetch the inserted row.
-        pass
+    except Exception as e:
+        import traceback
+        print(f"ERRO INSERT CANDIDATURA: {e}")
+        traceback.print_exc()
+        return None
+
     query = db.client.table("candidaturas").select("*").filter("vaga_id", "eq", payload.get("vaga_id"))
     if payload.get("origem"):
         query = query.filter("origem", "eq", payload.get("origem"))
-        # attempt to find the inserted candidatura by vaga_id
-    # fetch the most-recent matching item — PostgREST ordering can vary by setup,
-    # use a simple limit(1) for a smoke-test fetch
     res = query.limit(1).execute()
     return res.data[0] if getattr(res, "data", None) else None
 

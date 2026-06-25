@@ -32,3 +32,4 @@ class Candidatura(BaseModel):
 
     class Config:
         orm_mode = True
+        

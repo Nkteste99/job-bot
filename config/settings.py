@@ -16,6 +16,9 @@ class Settings(BaseSettings):
         description="JWT do cookie candidate_secure_token da Gupy",
     )
 
+    # Apresentação
+    APRESENTACAO_TEXTO: str = Field("", description="Texto de apresentação para candidaturas")
+
     # App
     LOG_LEVEL: str = Field("INFO", description="Logging level")
 

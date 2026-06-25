@@ -56,6 +56,7 @@ def _get_question_forms(
 
 
 def _process_questions(questions: List[Dict[str, Any]]) -> List[str]:
+    from database.respostas_repository import save_resposta
     skipped_questions: List[str] = []
     for question in questions:
         title = question.get("title") or ""
@@ -63,8 +64,13 @@ def _process_questions(questions: List[Dict[str, Any]]) -> List[str]:
             continue
         resposta = get_resposta(title)
         if resposta is None:
-            logger.warning("Pergunta sem resposta conhecida: %s", title)
-            skipped_questions.append(title)
+            print(f"\n❓ Pergunta sem resposta: {title}")
+            resposta = input("👉 Sua resposta (Enter para pular): ").strip()
+            if resposta:
+                save_resposta(title, resposta)
+                print(f"✅ Resposta salva no banco para uso futuro!")
+            else:
+                skipped_questions.append(title)
     return skipped_questions
 
 def _submit_presentation(session: requests.Session, application_id: int, texto: str) -> bool:

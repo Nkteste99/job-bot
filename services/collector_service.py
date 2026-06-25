@@ -90,10 +90,14 @@ def run_collection(cargo: str, localizacao: str) -> Tuple[int, int]:
 if __name__ == "__main__":
     cargo = "desenvolvedor"
     local = "São Paulo"
+
+    from services.gupy_auth import check_cookie_expiry_and_notify
+
     def _log(msg: str):
         logging.info(msg)
 
     def _job():
+        check_cookie_expiry_and_notify()
         _log("Coleta iniciada...")
         a, b = run_collection(cargo, local)
         _log(f"Coleta finalizada — Inseridas: {a}, Existentes: {b}")

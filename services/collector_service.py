@@ -12,8 +12,10 @@ from collectors.gupy import collect
 from models.models import Vaga
 from database.vagas_repository import get_vaga_by_external_id, insert_vaga
 from notifier.telegram import send_message, notify_new_vagas
+from services.gupy_auth import get_session, check_cookie_expiry_and_notify
+from services.apply_service import apply_to_job
 
-# Ensure logs directory exists at project root and configure logging to file
+# Ensuune logs directory exists at project root and configure logging to file
 ROOT = Path(__file__).resolve().parents[1]
 LOG_DIR = ROOT / "logs"
 LOG_DIR.mkdir(parents=True, exist_ok=True)
@@ -61,12 +63,15 @@ def run_collection(cargo: str, localizacao: str) -> Tuple[int, int]:
                 if key in _seen_external_ids:
                     existing += 1
                     continue
-            # insert and ignore returned value
             insert_vaga(vaga)
-            # mark as seen in-memory
             if vaga.external_id:
                 _seen_external_ids.add(str(vaga.external_id))
             inserted += 1
+            try:
+                session = get_session()
+                apply_to_job(session, int(vaga.external_id), career_page_url=vaga.career_page_url)
+            except Exception as e:
+                logging.warning(f"Candidatura falhou para {vaga.external_id}: {e}")
         except Exception:
             # ignore individual failures and continue
             continue

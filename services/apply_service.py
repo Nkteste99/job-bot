@@ -49,6 +49,9 @@ def _get_question_forms(
         f"{application_id}/steps/{register_step_id}/forms"
     )
     response = session.get(url, headers=_json_headers(session), timeout=30)
+    if response.status_code == 404:
+        logger.info("Sem perguntas para applicationId=%s — continuando", application_id)
+        return []
     response.raise_for_status()
     payload = response.json()
     question_form = payload.get("questionForm") or {}

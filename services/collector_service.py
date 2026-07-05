@@ -63,6 +63,21 @@ def run_collection(cargo: str, localizacao: str) -> Tuple[int, int]:
             if vaga.external_id:
                 _seen_external_ids.add(str(vaga.external_id))
             inserted += 1
+
+            # Filtro de vagas exclusivas (PcD, cotas, etc.)
+            titulo = (vaga.titulo or "").lower()
+            descricao = (vaga.descricao or "").lower()
+            texto = titulo + " " + descricao
+            palavras_exclusivas = [
+                "pcd", "pessoa com deficiência", "pessoa com deficiencia",
+                "exclusivo para mulher", "exclusivo para mulheres",
+                "exclusivo para negro", "exclusivo para negros",
+                "cota", "lei 8.213", "laudo médico", "laudo medico"
+            ]
+            if any(p in texto for p in palavras_exclusivas):
+                logging.info(f"Vaga {vaga.external_id} ignorada — exclusiva/cota: {vaga.titulo}")
+                continue
+
             try:
                 session = get_session()
                 apply_to_job(session, int(vaga.external_id), career_page_url=vaga.career_page_url)

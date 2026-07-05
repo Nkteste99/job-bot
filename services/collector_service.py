@@ -38,10 +38,6 @@ def run_collection(cargo: str, localizacao: str) -> Tuple[int, int]:
     Returns a tuple: (inserted_count, existing_count)
     """
     vagas = collect(cargo, localizacao)
-    # LIMIT for testing phase (easy to remove later)
-    LIMIT = globals().get("LIMIT", 10)
-    if isinstance(LIMIT, int) and LIMIT > 0:
-        vagas = vagas[:LIMIT]
     inserted = 0
     existing = 0
     # in-process cache of external_ids seen during this process lifetime

@@ -9,7 +9,6 @@ from typing import List, Dict
 import requests
 
 from models.models import Vaga
-from database.vagas_repository import get_vaga_by_external_id, insert_vaga
 
 
 API_URL = "https://employability-portal.gupy.io/api/v1/jobs"
@@ -106,17 +105,7 @@ def collect(cargo: str, localizacao: str, limit: int = 100) -> List[Vaga]:
                 state = (job.get("state") or "").strip()
                 if workplace != "remote" and state != "São Paulo":
                     continue
-
                 vaga = _map_job_to_vaga(job)
-                if vaga.external_id:
-                    existing = get_vaga_by_external_id(vaga.external_id)
-                    if existing:
-                        continue
-                try:
-                    insert_vaga(vaga)
-                except Exception:
-                    pass
-
                 vagas.append(vaga)
             except Exception:
                 continue

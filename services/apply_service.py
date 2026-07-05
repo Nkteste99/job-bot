@@ -74,6 +74,8 @@ def _process_questions(questions: List[Dict[str, Any]]) -> List[str]:
                 print(f"✅ Resposta salva no banco para uso futuro!")
             else:
                 skipped_questions.append(title)
+        else:
+            print(f"✅ Resposta encontrada no banco: '{title}' → '{resposta}'")
     return skipped_questions
 
 def _submit_presentation(session: requests.Session, application_id: int, texto: str) -> bool:

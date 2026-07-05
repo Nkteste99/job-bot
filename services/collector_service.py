@@ -80,7 +80,7 @@ def run_collection(cargo: str, localizacao: str) -> Tuple[int, int]:
 
             try:
                 session = get_session()
-                apply_to_job(session, int(vaga.external_id), career_page_url=vaga.career_page_url)
+                apply_to_job(session, int(vaga.external_id), career_page_url=vaga.career_page_url, empresa=vaga.empresa, titulo=vaga.titulo, localizacao=vaga.localizacao)
             except Exception as e:
                 logging.warning(f"Candidatura falhou para {vaga.external_id}: {e}")
         except Exception:

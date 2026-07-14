@@ -79,7 +79,8 @@ def run_collection(cargo: str, localizacao: str, limite_teste: int = None) -> Tu
                 "pcd", "pessoa com deficiência", "pessoa com deficiencia",
                 "exclusivo para mulher", "exclusivo para mulheres",
                 "exclusivo para negro", "exclusivo para negros",
-                "cota", "lei 8.213", "laudo médico", "laudo medico"
+                "cota", "lei 8.213", "laudo médico", "laudo medico",
+                "afirmativa", "talentos diversos", "vaga afirmativa"
             ]
             if any(p in texto for p in palavras_exclusivas):
                 logging.info(f"Vaga {vaga.external_id} ignorada — exclusiva/cota: {vaga.titulo}")
@@ -87,7 +88,7 @@ def run_collection(cargo: str, localizacao: str, limite_teste: int = None) -> Tu
 
             try:
                 session = get_session()
-                apply_to_job(session, int(vaga.external_id), career_page_url=vaga.career_page_url, empresa=vaga.empresa, titulo=vaga.titulo, localizacao=vaga.localizacao, vaga_num=vaga_atual, total_vagas=total_novas)
+                apply_to_job(session, int(vaga.external_id), career_page_url=vaga.career_page_url, empresa=vaga.empresa, titulo=vaga.titulo, localizacao=vaga.localizacao, descricao=vaga.descricao, vaga_num=vaga_atual, total_vagas=total_novas)
             except Exception as e:
                 logging.warning(f"Candidatura falhou para {vaga.external_id}: {e}")
         except Exception:

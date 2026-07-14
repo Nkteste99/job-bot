@@ -58,18 +58,20 @@ def _get_question_forms(
     return question_form.get("questions") or []
 
 
-def _process_questions(questions: List[Dict[str, Any]], empresa: str = None, titulo: str = None, localizacao: str = None) -> List[str]:
+def _process_questions(questions: List[Dict[str, Any]], empresa: str = None, titulo: str = None, localizacao: str = None, vaga_num: int = None, total_vagas: int = None) -> List[str]:
     from database.respostas_repository import save_resposta
     skipped_questions: List[str] = []
-    contexto = f"[{empresa or '?'} — {titulo or '?'} — {localizacao or '?'}]"
-    for question in questions:
+    progresso_vaga = f"Vaga {vaga_num}/{total_vagas}" if vaga_num and total_vagas else ""
+    contexto = f"[{progresso_vaga} — {empresa or '?'} — {titulo or '?'} — {localizacao or '?'}]"
+    total_perguntas = len(questions)
+    for i, question in enumerate(questions, 1):
         title = question.get("title") or ""
         if not title:
             continue
         resposta = get_resposta(title)
         if resposta is None:
             print(f"\n{contexto}")
-            print(f"❓ Pergunta sem resposta: {title}")
+            print(f"❓ Pergunta {i}/{total_perguntas}: {title}")
             resposta = input("👉 Sua resposta (Enter para pular): ").strip()
             if resposta:
                 save_resposta(title, resposta)
@@ -134,7 +136,7 @@ def _register_candidatura(job_id: int, application_id: int) -> None:
     insert_candidatura(candidatura)
 
 
-def apply_to_job(session: requests.Session, job_id: int, career_page_url: str = None, empresa: str = None, titulo: str = None, localizacao: str = None) -> dict:
+def apply_to_job(session: requests.Session, job_id: int, career_page_url: str = None, empresa: str = None, titulo: str = None, localizacao: str = None, vaga_num: int = None, total_vagas: int = None) -> dict:
     if _has_existing_candidatura(job_id):
         logger.info("Candidatura já existe para job_id=%s — pulando", job_id)
         return {
@@ -158,7 +160,7 @@ def apply_to_job(session: requests.Session, job_id: int, career_page_url: str = 
     register_step_id = application["registerStepId"]
 
     questions = _get_question_forms(session, application_id, register_step_id)
-    skipped_questions = _process_questions(questions, empresa=empresa, titulo=titulo, localizacao=localizacao)
+    skipped_questions = _process_questions(questions, empresa=empresa, titulo=titulo, localizacao=localizacao, vaga_num=vaga_num, total_vagas=total_vagas)
 
     from config.settings import settings
     texto = getattr(settings, "APRESENTACAO_TEXTO", "") or ""

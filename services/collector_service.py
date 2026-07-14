@@ -47,6 +47,10 @@ def run_collection(cargo: str, localizacao: str) -> Tuple[int, int]:
     except NameError:
         _seen_external_ids = set()
 
+    vagas_novas = [v for v in vagas if v.external_id and not get_vaga_by_external_id(str(v.external_id)) and str(v.external_id) not in _seen_external_ids]
+    total_novas = len(vagas_novas)
+    vaga_atual = 0
+
     for vaga in vagas:
         try:
             if vaga.external_id:
@@ -63,7 +67,8 @@ def run_collection(cargo: str, localizacao: str) -> Tuple[int, int]:
             if vaga.external_id:
                 _seen_external_ids.add(str(vaga.external_id))
             inserted += 1
-
+            vaga_atual += 1
+            print(f"\n📋 Vaga {vaga_atual}/{total_novas} — {vaga.empresa} — {vaga.titulo}")
             # Filtro de vagas exclusivas (PcD, cotas, etc.)
             titulo = (vaga.titulo or "").lower()
             descricao = (vaga.descricao or "").lower()
@@ -80,7 +85,7 @@ def run_collection(cargo: str, localizacao: str) -> Tuple[int, int]:
 
             try:
                 session = get_session()
-                apply_to_job(session, int(vaga.external_id), career_page_url=vaga.career_page_url, empresa=vaga.empresa, titulo=vaga.titulo, localizacao=vaga.localizacao)
+                apply_to_job(session, int(vaga.external_id), career_page_url=vaga.career_page_url, empresa=vaga.empresa, titulo=vaga.titulo, localizacao=vaga.localizacao, vaga_num=vaga_atual, total_vagas=total_novas)
             except Exception as e:
                 logging.warning(f"Candidatura falhou para {vaga.external_id}: {e}")
         except Exception:

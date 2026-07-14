@@ -32,12 +32,14 @@ logging.basicConfig(
 )
 
 
-def run_collection(cargo: str, localizacao: str) -> Tuple[int, int]:
+def run_collection(cargo: str, localizacao: str, limite_teste: int = None) -> Tuple[int, int]:
     """Run collection for given cargo and localizacao.
 
     Returns a tuple: (inserted_count, existing_count)
     """
     vagas = collect(cargo, localizacao)
+    if limite_teste and limite_teste > 0:
+        vagas = vagas[:limite_teste]
     inserted = 0
     existing = 0
     # in-process cache of external_ids seen during this process lifetime

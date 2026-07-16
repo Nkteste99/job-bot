@@ -390,14 +390,26 @@ def apply_to_job(session: requests.Session, job_id: int, career_page_url: str = 
             "reason": "candidatura_ja_existe",
         }
 
+    # Extrair origin da career_page_url ou do link da vaga
+    from urllib.parse import urlparse
     if career_page_url:
-        from urllib.parse import urlparse
         parsed = urlparse(career_page_url)
         company_origin = f"{parsed.scheme}://{parsed.netloc}"
         session.headers.update({
             "origin": company_origin,
             "referer": f"{company_origin}/",
         })
+    else:
+        # Tentar extrair do link da vaga (ex: https://montreal.gupy.io/job/...)
+        vaga_info = get_vaga_by_external_id(str(job_id))
+        link = vaga_info.get("link") if vaga_info else None
+        if link:
+            parsed = urlparse(link)
+            company_origin = f"{parsed.scheme}://{parsed.netloc}"
+            session.headers.update({
+                "origin": company_origin,
+                "referer": f"{company_origin}/",
+            })
 
     application = _create_application(session, job_id)
     application_id = application["applicationId"]

@@ -103,7 +103,10 @@ def collect(cargo: str, localizacao: str, limit: int = 100) -> List[Vaga]:
             try:
                 workplace = (job.get("workplaceType") or "").lower()
                 state = (job.get("state") or "").strip()
-                if workplace != "remote" and state != "São Paulo":
+                # Presencial: apenas SP. Remoto: qualquer lugar.
+                if workplace == "remote":
+                    pass  # aceita de qualquer lugar
+                elif state != "São Paulo":
                     continue
                 vaga = _map_job_to_vaga(job)
                 vagas.append(vaga)

@@ -11,7 +11,7 @@ import schedule
 from collectors.gupy import collect
 from models.models import Vaga
 from database.vagas_repository import get_vaga_by_external_id, insert_vaga, delete_vaga_by_external_id
-from database.candidaturas_repository import cleanup_old_candidaturas
+from database.candidaturas_repository import cleanup_old_candidaturas, get_candidaturas_by_vaga_id
 from notifier.telegram import send_message, notify_new_vagas
 from services.gupy_auth import get_session, check_cookie_expiry_and_notify
 from services.apply_service import apply_to_job
@@ -58,7 +58,19 @@ def run_collection(cargo: str, localizacao: str, limite_teste: int = None) -> Tu
     except NameError:
         _seen_external_ids = set()
 
-    vagas_novas = [v for v in vagas if v.external_id and not get_vaga_by_external_id(str(v.external_id)) and str(v.external_id) not in _seen_external_ids]
+    vagas_novas = []
+    for v in vagas:
+        if not v.external_id:
+            continue
+        key = str(v.external_id)
+        if key in _seen_external_ids:
+            continue
+        vaga_db = get_vaga_by_external_id(key)
+        if vaga_db:
+            candidaturas = get_candidaturas_by_vaga_id(vaga_db["id"])
+            if candidaturas:
+                continue
+        vagas_novas.append(v)
     total_novas = len(vagas_novas)
     vaga_atual = 0
 
@@ -66,12 +78,18 @@ def run_collection(cargo: str, localizacao: str, limite_teste: int = None) -> Tu
         try:
             if vaga.external_id:
                 key = str(vaga.external_id)
-                if get_vaga_by_external_id(key):
-                    existing += 1
-                    continue
+                # Se já foi processada nesta execução, pula
                 if key in _seen_external_ids:
                     existing += 1
                     continue
+                # Se a vaga existe no banco, verificar se tem candidatura
+                vaga_db = get_vaga_by_external_id(key)
+                if vaga_db:
+                    candidaturas = get_candidaturas_by_vaga_id(vaga_db["id"])
+                    if candidaturas:
+                        existing += 1
+                        continue
+                    # Vaga existe mas sem candidatura → ainda precisa processar
             insert_vaga(vaga)
             if vaga.external_id:
                 _seen_external_ids.add(str(vaga.external_id))

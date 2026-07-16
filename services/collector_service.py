@@ -147,6 +147,58 @@ def run_collection(cargo: str, localizacao: str, limite_teste: int = None) -> Tu
     return inserted, existing
 
 
+def run_apply_only(limite: int = None) -> Tuple[int, int]:
+    """Candidata-se às vagas que já estão no banco mas não têm candidatura.
+    Não coleta novas vagas da API.
+
+    Returns: (enviadas, falharam)
+    """
+    from database.vagas_repository import get_all_vagas
+
+    vagas_db = get_all_vagas()
+    if limite and limite > 0:
+        vagas_db = vagas_db[:limite]
+
+    enviadas = 0
+    falharam = 0
+    total = len(vagas_db)
+
+    for i, vaga in enumerate(vagas_db, 1):
+        vaga_id = vaga.get("id")
+        external_id = vaga.get("external_id")
+
+        if not external_id:
+            continue
+
+        candidaturas = get_candidaturas_by_vaga_id(vaga_id)
+        if candidaturas:
+            continue
+
+        print(f"\n📋 Vaga {i}/{total} — {vaga.get('empresa')} — {vaga.get('titulo')}")
+        try:
+            session = get_session()
+            result = apply_to_job(
+                session, int(external_id),
+                empresa=vaga.get("empresa"),
+                titulo=vaga.get("titulo"),
+                localizacao=vaga.get("localizacao"),
+                descricao=vaga.get("descricao"),
+                vaga_num=i, total_vagas=total,
+            )
+            if result and result.get("success"):
+                enviadas += 1
+            else:
+                falharam += 1
+        except Exception as e:
+            falharam += 1
+            logging.warning(f"Candidatura falhou para {external_id}: {e}")
+
+    resumo = f"✅ Candidaturas:\n✅ {enviadas} enviadas\n❌ {falharam} falharam"
+    send_message(resumo)
+    print(resumo)
+    return enviadas, falharam
+
+
 if __name__ == "__main__":
     cargo = "desenvolvedor"
     local = "São Paulo"

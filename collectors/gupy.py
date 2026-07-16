@@ -108,6 +108,26 @@ def collect(cargo: str, localizacao: str, limit: int = 100) -> List[Vaga]:
                     pass  # aceita de qualquer lugar
                 elif state != "São Paulo":
                     continue
+
+                # Filtro de senioridade — vagas acima de pleno
+                nome = (job.get("name") or "").lower()
+                desc = (job.get("description") or "").lower()
+                texto_vaga = nome + " " + desc
+                senior_keywords = [
+                    " senior", "sênior", " sr.", " sr ", " sr/", "-sr",
+                    " specialist", "especialista",
+                    " lead", "líder",
+                    " head",
+                    " principal",
+                    " staff",
+                    " diretor", "director",
+                    " gerente", "manager",
+                    " tech lead",
+                    " engineering manager",
+                ]
+                if any(k in texto_vaga for k in senior_keywords):
+                    continue
+
                 vaga = _map_job_to_vaga(job)
                 vagas.append(vaga)
             except Exception:

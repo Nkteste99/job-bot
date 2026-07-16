@@ -71,6 +71,19 @@ def cleanup_old_candidaturas(dias: int = 30) -> int:
         return 0
 
 
+def get_candidaturas_by_status(status: str) -> List[Dict]:
+    """Busca candidaturas por status (ex: 'em andamento')."""
+    if not db.client:
+        return []
+    try:
+        res = (
+            db.client.table("candidaturas").select("*").filter("status", "eq", status).execute()
+        )
+        return res.data or []
+    except Exception:
+        return []
+
+
 if __name__ == "__main__":
     print("Running candidaturas_repository quick test...")
     from database.db import test_connection

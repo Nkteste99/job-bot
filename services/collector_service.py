@@ -11,7 +11,7 @@ import schedule
 from collectors.gupy import collect
 from models.models import Vaga
 from database.vagas_repository import get_vaga_by_external_id, insert_vaga, delete_vaga_by_external_id
-from database.candidaturas_repository import cleanup_old_candidaturas, get_candidaturas_by_vaga_id
+from database.candidaturas_repository import cleanup_old_candidaturas, get_candidaturas_by_vaga_id, get_candidaturas_by_status
 from notifier.telegram import send_message, notify_new_vagas
 from services.gupy_auth import get_session, check_cookie_expiry_and_notify
 from services.apply_service import apply_to_job
@@ -197,6 +197,119 @@ def run_apply_only(limite: int = None) -> Tuple[int, int]:
     send_message(resumo)
     print(resumo)
     return enviadas, falharam
+
+
+def run_resume_pending(limite: int = None) -> Tuple[int, int]:
+    """Retoma candidaturas 'em andamento' — tenta completar o fluxo de inscrição.
+
+    Returns: (completas, falharam)
+    """
+    pendentes = get_candidaturas_by_status("em andamento")
+    if limite and limite > 0:
+        pendentes = pendentes[:limite]
+
+    completas = 0
+    falharam = 0
+    total = len(pendentes)
+
+    if total == 0:
+        print("Nenhuma candidatura 'em andamento' encontrada.")
+        send_message("Nenhuma candidatura pendente para retomar.")
+        return 0, 0
+
+    print(f"Encontradas {total} candidaturas pendentes")
+
+    for i, cand in enumerate(pendentes, 1):
+        vaga_id = cand.get("vaga_id")
+        obs = cand.get("observacoes") or ""
+
+        # Extrair applicationId das observações
+        application_id = None
+        if "applicationId=" in obs:
+            try:
+                application_id = int(obs.split("applicationId=")[1].strip())
+            except (ValueError, IndexError):
+                pass
+
+        if not application_id:
+            print(f"\n⚠️  Candidatura {i}/{total}: applicationId não encontrado nas observações")
+            falharam += 1
+            continue
+
+        # Buscar dados da vaga
+        vaga_db = get_vaga_by_external_id(str(vaga_id)) if vaga_id else None
+        # Tentar buscar pelo external_id se vaga_db for None
+        if not vaga_db and vaga_id:
+            from database.db import db
+            try:
+                res = db.client.table("vagas").select("*").eq("id", vaga_id).limit(1).execute()
+                vaga_db = res.data[0] if res.data else None
+            except Exception:
+                pass
+
+        empresa = vaga_db.get("empresa") if vaga_db else "?"
+        titulo = vaga_db.get("titulo") if vaga_db else "?"
+
+        print(f"\n📋 Candidatura {i}/{total} — {empresa} — {titulo}")
+        print(f"   applicationId: {application_id}")
+
+        try:
+            session = get_session()
+            # Verificar status atual na Gupy
+            from services.apply_service import _get_step_status, _complete_step, _register_candidatura
+            step_info = _get_step_status(session, application_id)
+            registration_complete = step_info.get("registrationComplete", False)
+
+            if registration_complete:
+                print(f"   ✅ Já estava completa na Gupy — atualizando status")
+                from database.candidaturas_repository import update_candidatura_status
+                update_candidatura_status(cand["id"], "Candidatura enviada", f"applicationId={application_id}")
+                completas += 1
+                continue
+
+            # Tentar completar o step de registro
+            job_steps = step_info.get("job", {}).get("jobSteps", [])
+            register_step = None
+            for step in job_steps:
+                if step.get("type") == "register":
+                    register_step = step
+                    break
+
+            if not register_step:
+                print(f"   ⚠️  Step de registro não encontrado")
+                falharam += 1
+                continue
+
+            app_step = register_step.get("applicationStep", {})
+            register_step_id = app_step.get("id")
+
+            if not register_step_id:
+                print(f"   ⚠️  applicationStep.id não encontrado")
+                falharam += 1
+                continue
+
+            # Completar step
+            complete_result = _complete_step(session, application_id, register_step_id)
+            registration_complete = complete_result.get("registrationComplete", False)
+
+            if registration_complete:
+                print(f"   ✅ Candidatura completada com sucesso!")
+                from database.candidaturas_repository import update_candidatura_status
+                update_candidatura_status(cand["id"], "Candidatura enviada", f"applicationId={application_id}")
+                completas += 1
+            else:
+                print(f"   ⚠️  Ainda não confirmada — verifique manualmente na Gupy")
+                falharam += 1
+
+        except Exception as e:
+            falharam += 1
+            print(f"   ❌ Erro: {e}")
+            logging.warning(f"Erro ao retomar candidatura {cand.get('id')}: {e}")
+
+    resumo = f"🔄 Retomada de candidaturas:\n✅ {completas} completadas\n❌ {falharam} falharam"
+    send_message(resumo)
+    print(resumo)
+    return completas, falharam
 
 
 if __name__ == "__main__":

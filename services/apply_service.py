@@ -64,6 +64,30 @@ def _get_question_forms(
     return questions, form_id
 
 
+def _opt_label(opt: Any) -> str:
+    """Extrai o label legível de uma opção da API Gupy."""
+    if isinstance(opt, str):
+        return opt
+    if isinstance(opt, dict):
+        for key in ("label", "name", "text", "title", "description"):
+            val = opt.get(key)
+            if val:
+                return str(val)
+    return str(opt)
+
+
+def _opt_value(opt: Any) -> str:
+    """Extrai o valor/ID de uma opção da API Gupy."""
+    if isinstance(opt, str):
+        return opt
+    if isinstance(opt, dict):
+        for key in ("value", "id", "optionId", "option_id"):
+            val = opt.get(key)
+            if val is not None:
+                return str(val)
+    return _opt_label(opt)
+
+
 def _submit_answers(
     session: requests.Session, application_id: int, register_step_id: int,
     form_id: int, questions: List[Dict[str, Any]], answers_map: Dict[int, str]
@@ -163,14 +187,6 @@ def _process_questions(
         f"{'='*60}"
     )
     print(cabecalho)
-    mensagem_telegram = (
-        f"📋 {progresso_vaga} — {empresa or '?'}\n"
-        f"💼 {titulo or '?'}\n"
-        f"📍 {localizacao or '?'}\n\n"
-        f"📄 {descricao.strip()[:3000] if descricao else 'Sem descrição'}"
-    )
-    send_message(mensagem_telegram)
-    time.sleep(5)
     contexto = f"[{progresso_vaga} — {empresa or '?'} — {titulo or '?'}]"
     total_perguntas = len(questions)
 
@@ -185,13 +201,6 @@ def _process_questions(
             continue
 
         tag_obrigatorio = " ⚠️  OBRIGATÓRIO" if required else " (opcional)"
-        tag_tipo = ""
-        if qtype == "TEXT_AREA":
-            tag_tipo = " [texto]"
-        elif qtype in ("SELECT", "MULTIPLE_CHOICE"):
-            tag_tipo = " [escolha múltipla]"
-        elif qtype == "CHECKBOX":
-            tag_tipo = " [marcar opções]"
 
         # Tentar resposta salva no banco
         resposta = get_resposta(title)
@@ -201,74 +210,105 @@ def _process_questions(
             continue
 
         print(f"\n{contexto}")
-        print(f"❓ Pergunta {i}/{total_perguntas}{tag_obrigatorio}{tag_tipo}: {title}")
+        print(f"❓ Pergunta {i}/{total_perguntas}{tag_obrigatorio}: {title}")
 
-        # Múltipla escolha (SELECT / MULTIPLE_CHOICE)
-        if qtype in ("SELECT", "MULTIPLE_CHOICE") and options:
-            for idx, opt in enumerate(options, 1):
-                opt_label = opt.get("label") or opt.get("name") or opt.get("text") or str(opt)
-                print(f"   {idx} - {opt_label}")
-            resposta = input(f"👉 Escolha o número (1-{len(options)}): ").strip()
-            if resposta.isdigit() and 1 <= int(resposta) <= len(options):
-                chosen = options[int(resposta) - 1]
-                chosen_label = chosen.get("label") or chosen.get("name") or chosen.get("text") or str(chosen)
-                chosen_value = chosen.get("value") or chosen.get("id") or chosen_label
-                answers_map[qid] = str(chosen_value)
-                save_resposta(title, str(chosen_value))
-                print(f"✅ Opção {resposta} selecionada: {chosen_label}")
-            elif not resposta and not required:
-                skipped_questions.append(title)
-                print("⏭️  Pulado (opcional)")
-            else:
-                print("❌ Opção inválida — pulando pergunta")
-                skipped_questions.append(title)
-            continue
+        # Se tem opções E é tipo SELECT/MULTIPLE_CHOICE/CHECKBOX → menu numérico
+        tem_opcoes = bool(options) and qtype in ("SELECT", "MULTIPLE_CHOICE", "CHECKBOX")
 
-        # Checkboxes (múltiplas seleções)
-        if qtype == "CHECKBOX" and options:
+        if tem_opcoes:
             for idx, opt in enumerate(options, 1):
-                opt_label = opt.get("label") or opt.get("name") or opt.get("text") or str(opt)
-                print(f"   {idx} - {opt_label}")
-            raw = input(f"👉 Números separados por vírgula (ex: 1,3): ").strip()
-            if raw:
-                indices = [s.strip() for s in raw.split(",") if s.strip().isdigit()]
-                valores = []
-                labels = []
-                for idx_str in indices:
-                    idx = int(idx_str)
-                    if 1 <= idx <= len(options):
-                        chosen = options[idx - 1]
-                        chosen_value = chosen.get("value") or chosen.get("id") or chosen.get("label") or str(chosen)
-                        valores.append(str(chosen_value))
-                        labels.append(chosen.get("label") or chosen.get("name") or str(chosen))
-                if valores:
-                    answers_map[qid] = ",".join(valores)
-                    save_resposta(title, ",".join(valores))
-                    print(f"✅ Selecionadas: {', '.join(labels)}")
+                print(f"   {idx} - {_opt_label(opt)}")
+
+            if qtype == "CHECKBOX":
+                raw = input(f"👉 Números separados por vírgula (ex: 1,3): ").strip()
+                if raw:
+                    indices = [s.strip() for s in raw.split(",") if s.strip().isdigit()]
+                    valores = []
+                    labels = []
+                    for idx_str in indices:
+                        idx = int(idx_str)
+                        if 1 <= idx <= len(options):
+                            chosen = options[idx - 1]
+                            valores.append(_opt_value(chosen))
+                            labels.append(_opt_label(chosen))
+                    if valores:
+                        answers_map[qid] = ",".join(valores)
+                        save_resposta(title, ",".join(valores))
+                        print(f"✅ Selecionadas: {', '.join(labels)}")
+                    else:
+                        print("❌ Nenhuma opção válida")
+                        if required:
+                            skipped_questions.append(title)
+                            print("❌ Obrigatória ignorada — inscrição pode ficar incompleta")
+                        else:
+                            skipped_questions.append(title)
+                            print("⏭️  Pulado (opcional)")
+                elif not required:
+                    skipped_questions.append(title)
+                    print("⏭️  Pulado (opcional)")
                 else:
                     skipped_questions.append(title)
-                    print("❌ Nenhuma opção válida — pulando")
-            elif not required:
-                skipped_questions.append(title)
-                print("⏭️  Pulado (opcional)")
+                    print("❌ Obrigatória ignorada — inscrição pode ficar incompleta")
             else:
-                skipped_questions.append(title)
-                print("❌ Nenhuma opção selecionada — pergunta obrigatória ignorada")
+                # SELECT / MULTIPLE_CHOICE (seleção única)
+                resposta = input(f"👉 Escolha o número (1-{len(options)}): ").strip()
+                if resposta.isdigit() and 1 <= int(resposta) <= len(options):
+                    chosen = options[int(resposta) - 1]
+                    answers_map[qid] = _opt_value(chosen)
+                    save_resposta(title, _opt_value(chosen))
+                    print(f"✅ Opção {resposta} selecionada: {_opt_label(chosen)}")
+                elif not resposta and not required:
+                    skipped_questions.append(title)
+                    print("⏭️  Pulado (opcional)")
+                else:
+                    print("❌ Opção inválida")
+                    if required:
+                        skipped_questions.append(title)
+                        print("❌ Obrigatória ignorada — inscrição pode ficar incompleta")
+                    else:
+                        skipped_questions.append(title)
+                        print("⏭️  Pulado (opcional)")
             continue
 
-        # Texto livre (TEXT / TEXT_AREA)
+        # Texto livre (TEXT / TEXT_AREA) — inclui CHECKBOX/SELECT sem opções
+        if qtype in ("SELECT", "MULTIPLE_CHOICE", "CHECKBOX") and not options:
+            print("   (API não retornou opções — digite sua resposta como texto)")
+
         placeholder = "Enter para pular" if not required else "⚠️  OBRIGATÓRIO — digite algo"
         resposta = input(f"👉 Sua resposta ({placeholder}): ").strip()
+
         if resposta:
+            # Confirmação antes de salvar
+            print(f"\n📝 Você digitou: \"{resposta}\"")
+            confirma = input("   Confirmar? (S/n): ").strip().lower()
+            if confirma == "n":
+                resposta = input("   Digite novamente (ou Enter para pular): ").strip()
+                if not resposta:
+                    if required:
+                        skipped_questions.append(title)
+                        print("❌ Obrigatória ignorada — inscrição pode ficar incompleta")
+                    else:
+                        skipped_questions.append(title)
+                        print("⏭️  Pulado (opcional)")
+                    continue
+
             answers_map[qid] = resposta
             save_resposta(title, resposta)
             print(f"✅ Resposta salva no banco para uso futuro!")
         elif required:
             resposta_manual = input("⚠️  Essa pergunta é obrigatória. Digite sua resposta: ").strip()
             if resposta_manual:
-                answers_map[qid] = resposta_manual
-                save_resposta(title, resposta_manual)
-                print(f"✅ Resposta salva!")
+                print(f"\n📝 Você digitou: \"{resposta_manual}\"")
+                confirma = input("   Confirmar? (S/n): ").strip().lower()
+                if confirma == "n":
+                    resposta_manual = input("   Digite novamente: ").strip()
+                if resposta_manual:
+                    answers_map[qid] = resposta_manual
+                    save_resposta(title, resposta_manual)
+                    print(f"✅ Resposta salva!")
+                else:
+                    skipped_questions.append(title)
+                    print("❌ Obrigatória mas pulada — inscrição pode ficar incompleta")
             else:
                 skipped_questions.append(title)
                 print("❌ Obrigatória mas pulada — inscrição pode ficar incompleta")
@@ -363,6 +403,24 @@ def apply_to_job(session: requests.Session, job_id: int, career_page_url: str = 
     application_id = application["applicationId"]
     register_step_id = application["registerStepId"]
 
+    # Enviar resumo da vaga no Telegram
+    msg_parts = []
+    if vaga_num and total_vagas:
+        msg_parts.append(f"📋 Vaga {vaga_num}/{total_vagas}")
+    if empresa:
+        msg_parts.append(f"🏢 {empresa}")
+    if titulo:
+        msg_parts.append(f"💼 {titulo}")
+    if localizacao:
+        msg_parts.append(f"📍 {localizacao}")
+    if descricao:
+        desc_limpa = descricao.strip().replace("<br>", "\n").replace("<br/>", "\n")
+        import re
+        desc_limpa = re.sub(r"<[^>]+>", "", desc_limpa)
+        msg_parts.append(f"\n{desc_limpa[:2000]}")
+    send_message("\n".join(msg_parts))
+    time.sleep(2)
+
     questions, form_id = _get_question_forms(session, application_id, register_step_id)
     skipped_questions, answers_map = _process_questions(
         questions, empresa=empresa, titulo=titulo, localizacao=localizacao,
@@ -398,9 +456,11 @@ def apply_to_job(session: requests.Session, job_id: int, career_page_url: str = 
 
     if registration_complete:
         print(f"✅ Candidatura ENVIADA E CONFIRMADA — applicationId={application_id}")
+        send_message(f"✅ Inscrição confirmada!\n💼 {titulo}\n🏢 {empresa}\napplicationId: {application_id}")
     else:
         print(f"⚠️  Candidatura enviada mas NÃO CONFIRMADA — applicationId={application_id}")
         print("   Verifique manualmente na Gupy se a inscrição ficou completa.")
+        send_message(f"⚠️  Inscrição NÃO confirmada!\n💼 {titulo}\n🏢 {empresa}\napplicationId: {application_id}\nVerifique manualmente na Gupy.")
 
     return {
         "success": registration_complete,

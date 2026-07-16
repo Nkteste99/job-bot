@@ -98,8 +98,14 @@ def _format_vaga_message(vaga: Vaga) -> str:
     elif workplace_value:
         lines.append("🏢 Presencial")
 
-    # Salary placeholder for V3 extraction
-    lines.append("⚠️ Salário: Não informado")
+    # Salary
+    salary = _first_text(
+        getattr(vaga, "salario", None),
+        getattr(vaga, "salary", None),
+        getattr(vaga, "remuneration", None),
+    )
+    if salary:
+        lines.append(f"💰 {salary}")
 
     # Application deadline: try several possible attribute names
     deadline = None

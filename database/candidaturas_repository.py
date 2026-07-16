@@ -50,8 +50,25 @@ def update_candidatura_status(candidatura_id: int, status: str, observacoes: Opt
     res = (
         db.client.table("candidaturas").update(payload).eq("id", candidatura_id).execute()
     )
-    # success if no error and affected rows present
     return bool(getattr(res, "data", None))
+
+
+def cleanup_old_candidaturas(dias: int = 30) -> int:
+    """Deleta candidaturas mais antigas que X dias. Retorna quantas foram deletadas."""
+    if not db.client:
+        return 0
+    from datetime import datetime, timedelta, timezone
+    cutoff = (datetime.now(timezone.utc) - timedelta(days=dias)).isoformat()
+    try:
+        res = (
+            db.client.table("candidaturas")
+            .delete()
+            .lt("data_aplicacao", cutoff)
+            .execute()
+        )
+        return len(getattr(res, "data", None) or [])
+    except Exception:
+        return 0
 
 
 if __name__ == "__main__":

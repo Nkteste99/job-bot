@@ -41,13 +41,31 @@ def get_all_vagas() -> List[Dict]:
 def get_vaga_by_external_id(external_id: str) -> Optional[Dict]:
     if not db.client:
         raise RuntimeError("Supabase client is not initialized")
-    # Use the generic filter API to avoid parsing issues
-    # ensure we compare strings consistently
     key = str(external_id)
     res = (
         db.client.table("vagas").select("*").filter("external_id", "eq", key).limit(1).execute()
     )
     return res.data[0] if getattr(res, "data", None) else None
+
+
+def delete_vaga_by_id(vaga_id: int) -> bool:
+    if not db.client:
+        return False
+    try:
+        db.client.table("vagas").delete().eq("id", vaga_id).execute()
+        return True
+    except Exception:
+        return False
+
+
+def delete_vaga_by_external_id(external_id: str) -> bool:
+    if not db.client:
+        return False
+    try:
+        db.client.table("vagas").delete().eq("external_id", str(external_id)).execute()
+        return True
+    except Exception:
+        return False
 
 
 if __name__ == "__main__":

@@ -11,5 +11,8 @@ logs/
 collector.log
 collector.pid
 
+# HAR files (contêm dados sensíveis de requisições)
+*.har
+
 # VSCode
 .vscode/

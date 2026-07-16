@@ -1,0 +1,14 @@
+.env
+.env.*
+__pycache__/
+*.py[cod]
+*.egg-info/
+.vscode/
+.venv/
+.venv
+logs/
+*.har
+*.log
+*.pid
+.git/
+.cursor/

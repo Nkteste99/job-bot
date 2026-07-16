@@ -150,12 +150,34 @@ def run_collection(cargo: str, localizacao: str, limite_teste: int = None) -> Tu
 def run_apply_only(limite: int = None) -> Tuple[int, int]:
     """Candidata-se às vagas que já estão no banco mas não têm candidatura.
     Não coleta novas vagas da API.
+    Filtra vagas senior+.
 
     Returns: (enviadas, falharam)
     """
     from database.vagas_repository import get_all_vagas
 
     vagas_db = get_all_vagas()
+
+    # Filtro de senioridade
+    senior_keywords = [
+        " senior", "sênior", " sr.", " sr ", " sr/", "-sr",
+        " specialist", "especialista",
+        " lead", "líder",
+        " head", " principal", " staff",
+        " diretor", "director",
+        " gerente", "manager",
+        " tech lead", " engineering manager",
+    ]
+    vagas_filtradas = []
+    for v in vagas_db:
+        titulo = (v.get("titulo") or "").lower()
+        desc = (v.get("descricao") or "").lower()
+        texto = titulo + " " + desc
+        if any(k in texto for k in senior_keywords):
+            continue
+        vagas_filtradas.append(v)
+    vagas_db = vagas_filtradas
+
     if limite and limite > 0:
         vagas_db = vagas_db[:limite]
 

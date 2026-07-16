@@ -366,11 +366,33 @@ def _get_step_status(session: requests.Session, application_id: int) -> Dict[str
     return response.json()
 
 
+def _register_candidatura_parcial(job_id: int, application_id: int) -> None:
+    """Registra candidatura imediatamente como 'em andamento' para evitar duplicatas."""
+    vaga = get_vaga_by_external_id(str(job_id))
+    if not vaga:
+        return
+    candidatura = Candidatura(
+        vaga_id=vaga["id"],
+        status="em andamento",
+        observacoes=f"applicationId={application_id}",
+        origem="gupy_api",
+    )
+    insert_candidatura(candidatura)
+
+
 def _register_candidatura(job_id: int, application_id: int, registration_complete: bool) -> None:
+    """Atualiza candidatura existente com status final."""
     vaga = get_vaga_by_external_id(str(job_id))
     if not vaga:
         return
     status = "Candidatura enviada" if registration_complete else "Candidatura incompleta"
+    candidaturas = get_candidaturas_by_vaga_id(vaga["id"])
+    for c in candidaturas:
+        if c.get("origem") == "gupy_api":
+            from database.candidaturas_repository import update_candidatura_status
+            update_candidatura_status(c["id"], status, f"applicationId={application_id}")
+            return
+    # Se não encontrou, cria nova
     candidatura = Candidatura(
         vaga_id=vaga["id"],
         status=status,
@@ -414,6 +436,10 @@ def apply_to_job(session: requests.Session, job_id: int, career_page_url: str = 
     application = _create_application(session, job_id)
     application_id = application["applicationId"]
     register_step_id = application["registerStepId"]
+
+    # Registrar candidatura IMEDIATAMENTE como "em andamento"
+    # Se der Ctrl+C depois, a candidatura fica registrada e não duplica
+    _register_candidatura_parcial(job_id, application_id)
 
     # Enviar resumo da vaga no Telegram
     msg_parts = []

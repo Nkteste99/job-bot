@@ -2,7 +2,7 @@ import logging
 from typing import Any, Dict, List, Optional, Tuple
 
 import time
-from notifier.telegram import send_message
+from notifier.telegram import send_message, send_question_and_wait_reply
 
 import requests
 
@@ -172,21 +172,13 @@ def _process_questions(
     vaga_num: int = None,
     total_vagas: int = None,
 ) -> Tuple[List[str], Dict[int, str]]:
-    """Processa perguntas interativamente.
+    """Processa perguntas interativamente via Telegram.
 
     Retorna (skipped_questions, answers_map) onde answers_map mapeia questionId -> resposta.
     """
     skipped_questions: List[str] = []
     answers_map: Dict[int, str] = {}
     progresso_vaga = f"Vaga {vaga_num}/{total_vagas}" if vaga_num and total_vagas else ""
-    cabecalho = (
-        f"\n{'='*60}\n"
-        f"📋 {progresso_vaga} — {empresa or '?'}\n"
-        f"💼 {titulo or '?'}\n"
-        f"📍 {localizacao or '?'}\n"
-        f"{'='*60}"
-    )
-    print(cabecalho)
     contexto = f"[{progresso_vaga} — {empresa or '?'} — {titulo or '?'}]"
     total_perguntas = len(questions)
 
@@ -200,123 +192,135 @@ def _process_questions(
         if not title or qid is None:
             continue
 
-        tag_obrigatorio = " ⚠️  OBRIGATÓRIO" if required else " (opcional)"
+        tag_obrigatorio = " ⚠️ OBRIGATÓRIO" if required else " (opcional)"
 
         # Tentar resposta salva no banco
         resposta = get_resposta(title)
         if resposta is not None:
-            print(f"✅ Resposta encontrada no banco: '{title}' → '{resposta}'")
+            send_message(f"✅ Resposta encontrada no banco:\n{title}\n→ {resposta}")
             answers_map[qid] = resposta
             continue
 
-        print(f"\n{contexto}")
-        print(f"❓ Pergunta {i}/{total_perguntas}{tag_obrigatorio}: {title}")
+        prompt = f"{contexto}\n\n❓ Pergunta {i}/{total_perguntas}{tag_obrigatorio}:\n{title}"
 
-        # Se tem opções E é tipo SELECT/MULTIPLE_CHOICE/CHECKBOX → menu numérico
+        # Se tem opções E é tipo SELECT/MULTIPLE_CHOICE/CHECKBOX
         tem_opcoes = bool(options) and qtype in ("SELECT", "MULTIPLE_CHOICE", "CHECKBOX")
 
         if tem_opcoes:
-            for idx, opt in enumerate(options, 1):
-                print(f"   {idx} - {_opt_label(opt)}")
+            labels = [_opt_label(opt) for opt in options]
 
             if qtype == "CHECKBOX":
-                raw = input(f"👉 Números separados por vírgula (ex: 1,3): ").strip()
-                if raw:
-                    indices = [s.strip() for s in raw.split(",") if s.strip().isdigit()]
+                send_message(f"{prompt}\n\nOpções:\n" + "\n".join(f"  {idx+1} - {l}" for idx, l in enumerate(labels)))
+                reply = _poll_reply_text(f"👉 Números separados por vírgula (ex: 1,3):")
+                if reply:
+                    indices = [s.strip() for s in reply.split(",") if s.strip().isdigit()]
                     valores = []
-                    labels = []
+                    chosen_labels = []
                     for idx_str in indices:
-                        idx = int(idx_str)
-                        if 1 <= idx <= len(options):
-                            chosen = options[idx - 1]
+                        idx_num = int(idx_str)
+                        if 1 <= idx_num <= len(options):
+                            chosen = options[idx_num - 1]
                             valores.append(_opt_value(chosen))
-                            labels.append(_opt_label(chosen))
+                            chosen_labels.append(_opt_label(chosen))
                     if valores:
                         answers_map[qid] = ",".join(valores)
                         save_resposta(title, ",".join(valores))
-                        print(f"✅ Selecionadas: {', '.join(labels)}")
+                        send_message(f"✅ Selecionadas: {', '.join(chosen_labels)}")
                     else:
-                        print("❌ Nenhuma opção válida")
+                        send_message("❌ Nenhuma opção válida")
                         if required:
                             skipped_questions.append(title)
-                            print("❌ Obrigatória ignorada — inscrição pode ficar incompleta")
                         else:
                             skipped_questions.append(title)
-                            print("⏭️  Pulado (opcional)")
                 elif not required:
                     skipped_questions.append(title)
-                    print("⏭️  Pulado (opcional)")
+                    send_message("⏭️ Pulado (opcional)")
                 else:
                     skipped_questions.append(title)
-                    print("❌ Obrigatória ignorada — inscrição pode ficar incompleta")
+                    send_message("❌ Obrigatória ignorada")
             else:
                 # SELECT / MULTIPLE_CHOICE (seleção única)
-                resposta = input(f"👉 Escolha o número (1-{len(options)}): ").strip()
-                if resposta.isdigit() and 1 <= int(resposta) <= len(options):
-                    chosen = options[int(resposta) - 1]
-                    answers_map[qid] = _opt_value(chosen)
-                    save_resposta(title, _opt_value(chosen))
-                    print(f"✅ Opção {resposta} selecionada: {_opt_label(chosen)}")
-                elif not resposta and not required:
-                    skipped_questions.append(title)
-                    print("⏭️  Pulado (opcional)")
-                else:
-                    print("❌ Opção inválida")
-                    if required:
-                        skipped_questions.append(title)
-                        print("❌ Obrigatória ignorada — inscrição pode ficar incompleta")
+                reply = send_question_and_wait_reply(prompt, options=labels)
+                if reply:
+                    # Encontrar o índice da opção escolhida
+                    chosen_idx = None
+                    for idx, label in enumerate(labels):
+                        if label == reply:
+                            chosen_idx = idx
+                            break
+                    if chosen_idx is not None:
+                        chosen = options[chosen_idx]
+                        answers_map[qid] = _opt_value(chosen)
+                        save_resposta(title, _opt_value(chosen))
+                        send_message(f"✅ Opção selecionada: {_opt_label(chosen)}")
                     else:
-                        skipped_questions.append(title)
-                        print("⏭️  Pulado (opcional)")
+                        # Reply não é um label conhecido — tentar como número
+                        if reply.isdigit() and 1 <= int(reply) <= len(options):
+                            chosen = options[int(reply) - 1]
+                            answers_map[qid] = _opt_value(chosen)
+                            save_resposta(title, _opt_value(chosen))
+                            send_message(f"✅ Opção {reply} selecionada: {_opt_label(chosen)}")
+                        else:
+                            # Usar como texto livre
+                            answers_map[qid] = reply
+                            save_resposta(title, reply)
+                            send_message(f"✅ Resposta salva: {reply}")
+                elif not required:
+                    skipped_questions.append(title)
+                    send_message("⏭️ Pulado (opcional)")
+                else:
+                    skipped_questions.append(title)
+                    send_message("❌ Obrigatória ignorada")
             continue
 
-        # Texto livre (TEXT / TEXT_AREA) — inclui CHECKBOX/SELECT sem opções
+        # Texto livre (TEXT / TEXT_AREA)
         if qtype in ("SELECT", "MULTIPLE_CHOICE", "CHECKBOX") and not options:
-            print("   (API não retornou opções — digite sua resposta como texto)")
+            pass  # sem opções, tratar como texto
 
-        placeholder = "Enter para pular" if not required else "⚠️  OBRIGATÓRIO — digite algo"
-        resposta = input(f"👉 Sua resposta ({placeholder}): ").strip()
+        reply = send_question_and_wait_reply(prompt)
 
-        if resposta:
-            # Confirmação antes de salvar
-            print(f"\n📝 Você digitou: \"{resposta}\"")
-            confirma = input("   Confirmar? (S/n): ").strip().lower()
-            if confirma == "n":
-                resposta = input("   Digite novamente (ou Enter para pular): ").strip()
-                if not resposta:
+        if reply:
+            # Confirmação
+            confirm_msg = f"📝 Você digitou: \"{reply}\"\nConfirmar? (S/n)"
+            confirm_reply = send_question_and_wait_reply(confirm_msg, options=["Sim", "Não"])
+            if confirm_reply and confirm_reply.lower() in ("n", "nao", "não", "no", "n"):
+                retry = send_question_and_wait_reply("Digite novamente (ou envie /pular para pular):")
+                if retry and retry != "/pular":
+                    reply = retry
+                else:
                     if required:
                         skipped_questions.append(title)
-                        print("❌ Obrigatória ignorada — inscrição pode ficar incompleta")
+                        send_message("❌ Obrigatória ignorada")
                     else:
                         skipped_questions.append(title)
-                        print("⏭️  Pulado (opcional)")
+                        send_message("⏭️ Pulado (opcional)")
                     continue
 
-            answers_map[qid] = resposta
-            save_resposta(title, resposta)
-            print(f"✅ Resposta salva no banco para uso futuro!")
+            answers_map[qid] = reply
+            save_resposta(title, reply)
+            send_message("✅ Resposta salva no banco para uso futuro!")
         elif required:
-            resposta_manual = input("⚠️  Essa pergunta é obrigatória. Digite sua resposta: ").strip()
+            send_message("⚠️ Essa pergunta é OBRIGATÓRIA.")
+            resposta_manual = _poll_reply_text("Digite sua resposta:")
             if resposta_manual:
-                print(f"\n📝 Você digitou: \"{resposta_manual}\"")
-                confirma = input("   Confirmar? (S/n): ").strip().lower()
-                if confirma == "n":
-                    resposta_manual = input("   Digite novamente: ").strip()
-                if resposta_manual:
-                    answers_map[qid] = resposta_manual
-                    save_resposta(title, resposta_manual)
-                    print(f"✅ Resposta salva!")
-                else:
-                    skipped_questions.append(title)
-                    print("❌ Obrigatória mas pulada — inscrição pode ficar incompleta")
+                answers_map[qid] = resposta_manual
+                save_resposta(title, resposta_manual)
+                send_message("✅ Resposta salva!")
             else:
                 skipped_questions.append(title)
-                print("❌ Obrigatória mas pulada — inscrição pode ficar incompleta")
+                send_message("❌ Obrigatória mas pulada")
         else:
             skipped_questions.append(title)
-            print("⏭️  Pulado (opcional)")
+            send_message("⏭️ Pulado (opcional)")
 
     return skipped_questions, answers_map
+
+
+def _poll_reply_text(prompt: str, timeout: int = 300) -> Optional[str]:
+    """Envia mensagem e aguarda resposta de texto simples via Telegram."""
+    from notifier.telegram import send_message as _send, _poll_reply
+    _send(prompt)
+    return _poll_reply(timeout=timeout)
 
 
 def _submit_presentation(session: requests.Session, application_id: int, texto: str) -> bool:

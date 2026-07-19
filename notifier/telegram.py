@@ -1,9 +1,20 @@
 from typing import List, Optional
 import logging
+import time
 import requests
 
 from config.settings import settings
 from models.models import Vaga
+
+# Offset global para poll de updates (evita reprocessar mensagens antigas)
+_last_update_id: int = 0
+
+
+def _get_token() -> Optional[str]:
+    try:
+        return settings.TELEGRAM_BOT_TOKEN.get_secret_value()
+    except Exception:
+        return getattr(settings, "TELEGRAM_BOT_TOKEN", None)
 
 
 def _first_text(*values) -> Optional[str]:
@@ -22,11 +33,7 @@ def send_message(text: str, vaga_id: Optional[str] = None) -> bool:
     If `vaga_id` is provided and the API returns a non-OK response, an error line
     will be logged to the project log so it can be traced: "TELEGRAM ERROR: {vaga_id} — {status_code}".
     """
-    token = None
-    try:
-        token = settings.TELEGRAM_BOT_TOKEN.get_secret_value()
-    except Exception:
-        token = getattr(settings, "TELEGRAM_BOT_TOKEN", None)
+    token = _get_token()
     chat_id = settings.TELEGRAM_CHAT_ID
     if not token or not chat_id:
         return False
@@ -53,6 +60,82 @@ def send_message(text: str, vaga_id: Optional[str] = None) -> bool:
         if vaga_id:
             logging.error(f"TELEGRAM ERROR: {vaga_id} — exception")
         return False
+
+
+def _poll_reply(timeout: int = 300) -> Optional[str]:
+    """Faz polling no getUpdates esperando uma mensagem do usuário. Timeout em segundos."""
+    global _last_update_id
+    token = _get_token()
+    chat_id = settings.TELEGRAM_CHAT_ID
+    if not token or not chat_id:
+        return None
+
+    url = f"https://api.telegram.org/bot{token}/getUpdates"
+    deadline = time.time() + timeout
+
+    while time.time() < deadline:
+        remaining = deadline - time.time()
+        poll_timeout = min(int(remaining), 30)
+        if poll_timeout <= 0:
+            break
+
+        try:
+            resp = requests.get(
+                url,
+                params={
+                    "offset": _last_update_id + 1,
+                    "timeout": poll_timeout,
+                    "allowed_updates": '["message"]',
+                },
+                timeout=poll_timeout + 5,
+            )
+            data = resp.json()
+            updates = data.get("result") or []
+
+            for update in updates:
+                _last_update_id = max(_last_update_id, update.get("update_id", 0))
+                msg = update.get("message") or {}
+                sender_chat = str(msg.get("chat", {}).get("id", ""))
+                text = msg.get("text") or ""
+                if sender_chat == str(chat_id) and text:
+                    logging.info("Resposta recebida via Telegram: %s", text[:100])
+                    return text.strip()
+
+        except Exception as e:
+            logging.warning("Erro no poll de updates: %s", e)
+            time.sleep(2)
+
+    return None
+
+
+def send_question_and_wait_reply(question: str, options: List[str] = None, timeout: int = 300) -> Optional[str]:
+    """Envia pergunta no Telegram e aguarda resposta do usuário.
+
+    Se options for fornecida, mostra menu numérico e espera o número.
+    Retorna a resposta do usuário ou None se timeout.
+    """
+    if options:
+        menu_lines = [question, ""]
+        for i, opt in enumerate(options, 1):
+            menu_lines.append(f"  {i} - {opt}")
+        menu_lines.append(f"\n👉 Envie o número (1-{len(options)}):")
+        send_message("\n".join(menu_lines))
+    else:
+        send_message(f"{question}\n\n👉 Digite sua resposta:")
+
+    reply = _poll_reply(timeout=timeout)
+
+    if reply and options:
+        if reply.isdigit() and 1 <= int(reply) <= len(options):
+            return options[int(reply) - 1]
+        # Tentar matching por texto parcial
+        reply_lower = reply.lower()
+        for opt in options:
+            if reply_lower in opt.lower():
+                return opt
+        return reply  # retorna como está se não achou match
+
+    return reply
 
 
 def _format_vaga_message(vaga: Vaga) -> str:

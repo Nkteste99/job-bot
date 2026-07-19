@@ -113,6 +113,7 @@ def check_pending_steps() -> None:
         send_message(msg)
         print(msg)
     else:
+        send_message("✅ Nenhum step pendente encontrado.")
         print("Nenhum step pendente encontrado.")
 
 

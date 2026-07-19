@@ -108,12 +108,14 @@ def _poll_reply(timeout: int = 300) -> Optional[str]:
     return None
 
 
-def send_question_and_wait_reply(question: str, options: List[str] = None, timeout: int = 300) -> Optional[str]:
+def send_question_and_wait_reply(question: str, options=None, timeout: int = 300) -> Optional[str]:
     """Envia pergunta no Telegram e aguarda resposta do usuário.
 
     Se options for fornecida, mostra menu numérico e espera o número.
     Retorna a resposta do usuário ou None se timeout.
     """
+    if isinstance(options, str):
+        options = [options]
     if options:
         menu_lines = [question, ""]
         for i, opt in enumerate(options, 1):

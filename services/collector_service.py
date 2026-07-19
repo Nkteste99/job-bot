@@ -1,6 +1,6 @@
 from typing import Tuple
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 
 import logging
 import sys
@@ -13,7 +13,7 @@ from models.models import Vaga
 from database.vagas_repository import get_vaga_by_external_id, insert_vaga, delete_vaga_by_external_id
 from database.candidaturas_repository import cleanup_old_candidaturas, get_candidaturas_by_vaga_id, get_candidaturas_by_status
 from notifier.telegram import send_message, notify_new_vagas
-from services.gupy_auth import get_session, check_cookie_expiry_and_notify
+from services.gupy_auth import get_session, check_cookie_expiry_and_notify, get_cookie_expiry
 from services.apply_service import apply_to_job
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -30,6 +30,40 @@ logging.basicConfig(
         logging.StreamHandler(sys.stdout),
     ],
 )
+
+
+def run_health_check() -> None:
+    """Verifica saúde do sistema: Supabase + Cookie Gupy. Envia resumo no Telegram."""
+    from database.db import test_connection
+
+    # Supabase
+    supabase_ok = test_connection()
+    supabase_icon = "✅" if supabase_ok else "❌"
+
+    # Cookie Gupy
+    expiry = get_cookie_expiry()
+    now = datetime.now(tz=timezone.utc)
+    if expiry:
+        days_left = (expiry - now).days
+        if days_left <= 0:
+            cookie_status = "🔴 EXPIRADO"
+        elif days_left <= 3:
+            cookie_status = f"🟠 expira em {days_left} dia(s)"
+        elif days_left <= 7:
+            cookie_status = f"🟡 expira em {days_left} dias"
+        else:
+            cookie_status = f"✅ válido ({days_left} dias restantes)"
+    else:
+        cookie_status = "⚠️ não foi possível verificar"
+
+    agora = now.strftime("%d/%m/%Y %H:%M")
+    msg = (
+        f"🔍 Health Check — {agora}\n\n"
+        f"{supabase_icon} Supabase: {'conectado' if supabase_ok else 'DESCONECTADO'}\n"
+        f"🍪 Cookie Gupy: {cookie_status}"
+    )
+    send_message(msg)
+    print(msg)
 
 
 def run_collection(cargo: str, localizacao: str, limite_teste: int = None) -> Tuple[int, int]:
@@ -352,9 +386,13 @@ if __name__ == "__main__":
     # immediate run
     _job()
 
-    # schedule hourly
+    # schedule hourly collection
     schedule.every(1).hours.do(_job)
-    _log("Agendador ativo: coleta a cada 1 hora")
+
+    # schedule daily health check at 8h
+    schedule.every().day.at("08:00").do(run_health_check)
+
+    _log("Agendador ativo: coleta a cada 1h, health check às 8h")
     try:
         while True:
             schedule.run_pending()

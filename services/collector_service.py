@@ -66,6 +66,56 @@ def run_health_check() -> None:
     print(msg)
 
 
+def check_pending_steps() -> None:
+    """Verifica candidaturas com steps pendentes e notifica no Telegram."""
+    candidaturas = get_candidaturas_by_status("Candidatura enviada")
+    if not candidaturas:
+        print("Nenhuma candidatura 'Candidatura enviada' para verificar.")
+        return
+
+    session = get_session()
+    pendentes = []
+
+    for cand in candidaturas:
+        obs = cand.get("observacoes") or ""
+        if not obs.startswith("applicationId="):
+            continue
+        application_id = int(obs.split("=")[1])
+
+        try:
+            url = f"https://private-api.gupy.io/selection-process/candidate/application/{application_id}/step"
+            resp = session.get(url, timeout=30)
+            if resp.status_code != 200:
+                continue
+            step_data = resp.json()
+            steps = step_data.get("steps") or []
+            for step in steps:
+                step_type = (step.get("type") or "").lower()
+                status = (step.get("status") or "").lower()
+                if step_type in ("online", "test", "quiz", "game") and status == "not-started":
+                    vaga_id = cand.get("vaga_id")
+                    pendentes.append({
+                        "application_id": application_id,
+                        "vaga_id": vaga_id,
+                        "step_type": step_type,
+                        "step_name": step.get("name") or step_type,
+                    })
+        except Exception as e:
+            logging.warning("Erro ao verificar steps para applicationId=%d: %s", application_id, e)
+            continue
+
+    if pendentes:
+        msg_lines = [f"📋 {len(pendentes)} step(s) pendente(s):\n"]
+        for p in pendentes:
+            msg_lines.append(f"• {p['step_name']} ({p['step_type']}) — applicationId={p['application_id']}")
+        msg_lines.append("\nAcesse a Gupy para completar.")
+        msg = "\n".join(msg_lines)
+        send_message(msg)
+        print(msg)
+    else:
+        print("Nenhum step pendente encontrado.")
+
+
 def run_collection(cargo: str, localizacao: str, limite_teste: int = None) -> Tuple[int, int]:
     """Run collection for given cargo and localizacao.
 
@@ -392,7 +442,10 @@ if __name__ == "__main__":
     # schedule daily health check at 8h
     schedule.every().day.at("08:00").do(run_health_check)
 
-    _log("Agendador ativo: coleta a cada 1h, health check às 8h")
+    # schedule daily pending steps check at 9h
+    schedule.every().day.at("09:00").do(check_pending_steps)
+
+    _log("Agendador ativo: coleta a cada 1h, health check às 8h, steps pendentes às 9h")
     try:
         while True:
             schedule.run_pending()

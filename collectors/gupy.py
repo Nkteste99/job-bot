@@ -6,6 +6,7 @@ and maps available fields into the `Vaga` model.
 """
 from typing import List, Dict
 import logging
+from datetime import datetime, timezone
 
 import requests
 
@@ -110,6 +111,16 @@ def collect(cargo: str, localizacao: str, limit: int = 100) -> List[Vaga]:
 
         for job in items:
             try:
+                # Filtro de vagas expiradas
+                deadline = job.get("applicationDeadline")
+                if deadline:
+                    try:
+                        exp_date = datetime.fromisoformat(deadline.replace("Z", "+00:00"))
+                        if exp_date < datetime.now(timezone.utc):
+                            continue
+                    except (ValueError, TypeError):
+                        pass  # se não conseguir parsear, não descarta
+
                 workplace = (job.get("workplaceType") or "").lower()
                 state = (job.get("state") or "").strip()
                 # Presencial: apenas SP. Remoto: qualquer lugar.

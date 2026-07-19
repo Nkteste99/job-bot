@@ -5,11 +5,13 @@ portal API. The collector is defensive: it accepts multiple response shapes
 and maps available fields into the `Vaga` model.
 """
 from typing import List, Dict
+import logging
 
 import requests
 
 from models.models import Vaga
 
+logger = logging.getLogger(__name__)
 
 API_URL = "https://employability-portal.gupy.io/api/v1/jobs"
 
@@ -62,6 +64,7 @@ def collect(cargo: str, localizacao: str, limit: int = 100) -> List[Vaga]:
     headers = {"User-Agent": "Mozilla/5.0"}
     vagas: List[Vaga] = []
     offset = 0
+    pagina = 0
 
     while True:
         params = {
@@ -73,7 +76,8 @@ def collect(cargo: str, localizacao: str, limit: int = 100) -> List[Vaga]:
         try:
             resp = requests.get(API_URL, params=params, headers=headers, timeout=10)
             resp.raise_for_status()
-        except Exception:
+        except Exception as e:
+            logger.warning("Erro na requisição (offset=%d): %s", offset, e)
             break
 
         try:
@@ -97,7 +101,12 @@ def collect(cargo: str, localizacao: str, limit: int = 100) -> List[Vaga]:
             items = payload
 
         if not items:
+            logger.info("Página %d: 0 itens — fim da paginação", pagina)
             break
+
+        pagina += 1
+        itens_nesta_pagina = len(items)
+        logger.info("Página %d: %d itens brutos (offset=%d)", pagina, itens_nesta_pagina, offset)
 
         for job in items:
             try:
@@ -136,9 +145,18 @@ def collect(cargo: str, localizacao: str, limit: int = 100) -> List[Vaga]:
         pagination = payload.get("pagination", {})
         total = pagination.get("total", 0)
         offset += limit
-        if offset >= total:
+
+        # Condição de parada dupla:
+        # 1. Não retornou itens suficientes = última página
+        # 2. offset >= total = todas as páginas percorridas
+        if itens_nesta_pagina < limit:
+            logger.info("Página %d retornou %d itens (limit=%d) — última página", pagina, itens_nesta_pagina, limit)
+            break
+        if total and offset >= total:
+            logger.info("Offset %d >= total %d — fim da paginação", offset, total)
             break
 
+    logger.info("Coleta finalizada: %d vagas filtradas de %d páginas", len(vagas), pagina)
     return vagas
 
 
